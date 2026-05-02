@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import type { ResultSetHeader } from 'mysql2';
 
 const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_NAME'] as const;
 
@@ -43,6 +44,21 @@ type SqlParam =
 export async function query<T>(sql: string, params?: SqlParam[]): Promise<T[]> {
   const [rows] = await pool.execute<mysql.RowDataPacket[]>(sql, params);
   return rows as unknown as T[];
+}
+
+/**
+ * Executes a write (INSERT / UPDATE / DELETE) statement and returns the
+ * result header, which includes `insertId` and `affectedRows`.
+ * @param sql - The SQL statement with `?` placeholders.
+ * @param params - Optional array of values to bind.
+ * @returns The ResultSetHeader for the executed statement.
+ */
+export async function execute(
+  sql: string,
+  params?: SqlParam[],
+): Promise<ResultSetHeader> {
+  const [result] = await pool.execute<ResultSetHeader>(sql, params);
+  return result;
 }
 
 export default pool;

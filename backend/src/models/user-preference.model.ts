@@ -1,8 +1,8 @@
 export interface UserPreference {
-  id: number;
   user_id: number;
-  preferred_content_type: 'films' | 'series' | 'both' | null;
-  favourite_genre_ids: string | null;
-  created_at: Date;
+  favourite_genre_ids: unknown | null;
+  favourite_decade: string | null;
+  preferred_content: 'films' | 'series' | 'both';
+  onboarding_completed: boolean;
   updated_at: Date;
 }
