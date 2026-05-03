@@ -116,3 +116,36 @@ export type TmdbSeriesCrewMember = TmdbCrewMember;
  * Reuses TmdbCreditsResult since the shape is identical.
  */
 export type TmdbSeriesCreditsResult = TmdbCreditsResult;
+
+// ─── Search response types ────────────────────────────────────────────────────
+
+/** Paginated movie search response from TMDB's /search/movie endpoint. */
+export interface TmdbSearchResponse {
+  results: TmdbMovie[];
+  total_results: number;
+  total_pages: number;
+}
+
+/** Paginated TV search response from TMDB's /search/tv endpoint. */
+export interface TmdbTvSearchResponse {
+  results: TmdbSeries[];
+  total_results: number;
+  total_pages: number;
+}
+
+/** A person as returned by TMDB's /search/person endpoint. */
+export interface TmdbPerson {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  known_for_department: string;
+  popularity: number;
+  known_for: Array<{ title?: string; name?: string; media_type: string }>;
+}
+
+/** Paginated person search response from TMDB's /search/person endpoint. */
+export interface TmdbPersonSearchResponse {
+  results: TmdbPerson[];
+  total_results: number;
+  total_pages: number;
+}

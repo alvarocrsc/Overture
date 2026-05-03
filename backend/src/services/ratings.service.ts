@@ -1,5 +1,7 @@
 import { query, execute } from '../config/db';
 import { AppError } from '../utils/app-error';
+import * as filmsService from './films.service';
+import * as seriesService from './series.service';
 import type { Rating } from '../models/rating.model';
 import type { Review } from '../models/review.model';
 import type { CreateRatingInput, UpdateRatingInput } from '../validators/rating.validators';
@@ -36,29 +38,43 @@ export interface CreateRatingResult {
 }
 
 /**
- * Resolves a TMDB ID to the internal films.id, throwing 404 if not cached.
+ * Resolves a TMDB movie ID to the internal films.id.
+ * If the film is not cached locally, fetches it from TMDB and caches it first.
+ * Throws 404 only if TMDB also has no record for that ID.
  * @param tmdbId - The TMDB movie ID sent by the client.
  * @returns The internal films.id.
  */
 async function resolveFilmId(tmdbId: number): Promise<number> {
   const [row] = await query<IdRow>(`SELECT id FROM films WHERE tmdb_id = ?`, [tmdbId]);
-  if (!row) {
-    throw new AppError('Film not found — visit /films/:tmdbId first to cache it', 404);
+  if (row) return row.id;
+
+  // Not cached — fetch from TMDB (handles upsert into films table).
+  try {
+    const film = await filmsService.getFilmById(tmdbId);
+    return film.id;
+  } catch {
+    throw new AppError('Film not found', 404);
   }
-  return row.id;
 }
 
 /**
- * Resolves a TMDB ID to the internal series.id, throwing 404 if not cached.
+ * Resolves a TMDB series ID to the internal series.id.
+ * If the series is not cached locally, fetches it from TMDB and caches it first.
+ * Throws 404 only if TMDB also has no record for that ID.
  * @param tmdbId - The TMDB series ID sent by the client.
  * @returns The internal series.id.
  */
 async function resolveSeriesId(tmdbId: number): Promise<number> {
   const [row] = await query<IdRow>(`SELECT id FROM series WHERE tmdb_id = ?`, [tmdbId]);
-  if (!row) {
-    throw new AppError('Series not found — visit /series/:tmdbId first to cache it', 404);
+  if (row) return row.id;
+
+  // Not cached — fetch from TMDB (handles upsert into series table).
+  try {
+    const series = await seriesService.getSeriesById(tmdbId);
+    return series.id;
+  } catch {
+    throw new AppError('Series not found', 404);
   }
-  return row.id;
 }
 
 /**
