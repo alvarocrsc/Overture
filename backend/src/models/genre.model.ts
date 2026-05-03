@@ -1,7 +1,7 @@
 export interface Genre {
   id: number;
-  tmdb_id: number;
   name: string;
+  tmdb_genre_id: number | null;
 }
 
 export interface FilmGenre {

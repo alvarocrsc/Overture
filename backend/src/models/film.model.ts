@@ -8,11 +8,8 @@ export interface Film {
   backdrop_path: string | null;
   release_date: string | null;
   runtime_min: number | null;
-  tmdb_rating: number | null;
-  tmdb_vote_count: number | null;
-  popularity: number | null;
-  tagline: string | null;
-  status: string | null;
   original_language: string | null;
+  tmdb_rating: number | null;
+  tmdb_popularity: number | null;
   cached_at: Date;
 }

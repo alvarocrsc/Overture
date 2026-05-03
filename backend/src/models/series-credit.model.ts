@@ -1,6 +1,6 @@
-export interface FilmCredit {
+export interface SeriesCredit {
   id: number;
-  film_id: number;
+  series_id: number;
   person_tmdb_id: number;
   person_name: string;
   role: 'director' | 'actor' | 'writer';
