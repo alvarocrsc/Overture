@@ -45,7 +45,15 @@ export interface CreateRatingResult {
  * @returns The internal films.id.
  */
 async function resolveFilmId(tmdbId: number): Promise<number> {
-  const [row] = await query<IdRow>(`SELECT id FROM films WHERE tmdb_id = ?`, [tmdbId]);
+  // Fast-path only when the film AND its credits are already cached.
+  // A film cached via search/trending has no film_credits rows, so we must
+  // fall through to getFilmById to populate them.
+  const [row] = await query<IdRow>(
+    `SELECT f.id FROM films f
+     WHERE f.tmdb_id = ?
+       AND EXISTS (SELECT 1 FROM film_credits WHERE film_id = f.id)`,
+    [tmdbId],
+  );
   if (row) return row.id;
 
   // Not cached — fetch from TMDB (handles upsert into films table).

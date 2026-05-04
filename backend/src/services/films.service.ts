@@ -152,7 +152,8 @@ export async function getFilmById(tmdbId: number): Promise<FilmWithGenres> {
      FROM films
      WHERE tmdb_id = ?
        AND cached_at > NOW() - INTERVAL 7 DAY
-       AND runtime_min IS NOT NULL`,
+       AND runtime_min IS NOT NULL
+       AND EXISTS (SELECT 1 FROM film_credits WHERE film_id = films.id)`,
     [tmdbId],
   );
 
@@ -207,7 +208,7 @@ export async function getFilmById(tmdbId: number): Promise<FilmWithGenres> {
   await execute(`DELETE FROM film_credits WHERE film_id = ?`, [filmId]);
 
   const directors = credits.crew.filter((m) => m.job === 'Director');
-  const topCast = credits.cast.slice(0, 15);
+  const cast = credits.cast;
 
   for (const director of directors) {
     await execute(
@@ -218,7 +219,7 @@ export async function getFilmById(tmdbId: number): Promise<FilmWithGenres> {
     );
   }
 
-  for (const actor of topCast) {
+  for (const actor of cast) {
     await execute(
       `INSERT INTO film_credits
          (film_id, person_tmdb_id, person_name, role, character_name,
@@ -318,7 +319,7 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
   // No local cache — fetch from TMDB.
   const credits = await tmdbService.getFilmCredits(tmdbId);
   const directors = credits.crew.filter((m) => m.job === 'Director');
-  const topCast = credits.cast.slice(0, 15);
+  const cast = credits.cast;
 
   if (film) {
     await execute(`DELETE FROM film_credits WHERE film_id = ?`, [film.id]);
@@ -332,7 +333,7 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
       );
     }
 
-    for (const actor of topCast) {
+    for (const actor of cast) {
       await execute(
         `INSERT INTO film_credits
            (film_id, person_tmdb_id, person_name, role, character_name,
@@ -358,7 +359,7 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
       profile_path: m.profile_path,
       popularity: m.popularity,
     })),
-    cast: topCast.map((m) => ({
+    cast: cast.map((m) => ({
       person_tmdb_id: m.id,
       person_name: m.name,
       character_name: m.character,

@@ -245,11 +245,11 @@ export async function getSeriesById(tmdbId: number): Promise<SeriesWithGenres> {
     }
   }
 
-  // Cache credits: directors and top-15 cast.
+  // Cache credits: all directors and full cast.
   await execute(`DELETE FROM series_credits WHERE series_id = ?`, [seriesId]);
 
   const directors = credits.crew.filter((m) => m.job === 'Director');
-  const topCast = credits.cast.slice(0, 15);
+  const cast = credits.cast;
 
   for (const director of directors) {
     await execute(
@@ -260,7 +260,7 @@ export async function getSeriesById(tmdbId: number): Promise<SeriesWithGenres> {
     );
   }
 
-  for (const actor of topCast) {
+  for (const actor of cast) {
     await execute(
       `INSERT INTO series_credits
          (series_id, person_tmdb_id, person_name, role, character_name,
@@ -364,7 +364,7 @@ export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsRes
   // No local cache — fetch from TMDB.
   const credits = await tmdbService.getSeriesCredits(tmdbId);
   const directors = credits.crew.filter((m) => m.job === 'Director');
-  const topCast = credits.cast.slice(0, 15);
+  const cast = credits.cast;
 
   if (series) {
     await execute(`DELETE FROM series_credits WHERE series_id = ?`, [series.id]);
@@ -378,7 +378,7 @@ export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsRes
       );
     }
 
-    for (const actor of topCast) {
+    for (const actor of cast) {
       await execute(
         `INSERT INTO series_credits
            (series_id, person_tmdb_id, person_name, role, character_name,
@@ -404,7 +404,7 @@ export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsRes
       profile_path: m.profile_path ?? null,
       popularity: m.popularity ?? null,
     })),
-    cast: topCast.map((m) => ({
+    cast: cast.map((m) => ({
       person_tmdb_id: m.id,
       person_name: m.name,
       character_name: m.character ?? null,
