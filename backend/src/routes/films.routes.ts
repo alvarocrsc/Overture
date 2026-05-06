@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getTrendingFilms,
+  getTopRatedFilms,
   getNewReleases,
   searchFilms,
   getFilmById,
@@ -15,6 +16,7 @@ const router = Router();
 
 // Static routes must appear before /:tmdbId to avoid param collision
 router.get('/trending', getTrendingFilms);
+router.get('/top-rated', getTopRatedFilms);
 router.get('/new-releases', getNewReleases);
 router.get('/search', searchFilms);
 

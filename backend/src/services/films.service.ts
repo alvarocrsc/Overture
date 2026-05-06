@@ -5,6 +5,20 @@ import type { Film } from '../models/film.model';
 import type { FilmCredit } from '../models/film-credit.model';
 import type { TmdbMovie, TmdbImage } from '../types/tmdb.types';
 
+/** A film row projected for search/discovery responses. */
+export interface FilmSearchResult {
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+}
+
+/** Paginated response returned by trending and search endpoints. */
+export interface PaginatedFilmsResult {
+  data: FilmSearchResult[];
+  page: number;
+  total_pages: number;
+}
+
 /** A Film row enriched with its genre list. Genre IDs are TMDB genre IDs. */
 export interface FilmWithGenres extends Film {
   genres: Array<{ id: number; name: string }>;
@@ -97,17 +111,37 @@ async function loadGenresForFilm(
   return rows.map((r) => ({ id: r.id!, name: r.name }));
 }
 
+/** Maps a raw TmdbMovie to the slim FilmSearchResult shape. */
+function toSearchResult(film: TmdbMovie): FilmSearchResult {
+  return { tmdb_id: film.id, title: film.title, poster_path: film.poster_path };
+}
+
 /**
  * Fetches the trending films for the current week, upserts them into the local
- * films cache, and returns the TMDB response directly.
- * @returns An array of TmdbMovie objects.
+ * films cache, and returns a paginated FilmSearchResult response.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns A PaginatedFilmsResult.
  */
-export async function getTrendingFilms(): Promise<TmdbMovie[]> {
-  const films = await tmdbService.getTrendingFilms();
-  for (const film of films) {
+export async function getTrendingFilms(page: number): Promise<PaginatedFilmsResult> {
+  const { results, total_pages } = await tmdbService.getTrendingFilms(page);
+  for (const film of results) {
     await upsertFilm(film);
   }
-  return films;
+  return { data: results.map(toSearchResult), page, total_pages };
+}
+
+/**
+ * Fetches the top-rated films, upserts them into the local films cache,
+ * and returns a paginated FilmSearchResult response.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns A PaginatedFilmsResult.
+ */
+export async function getTopRatedFilms(page: number): Promise<PaginatedFilmsResult> {
+  const { results, total_pages } = await tmdbService.getTopRatedFilms(page);
+  for (const film of results) {
+    await upsertFilm(film);
+  }
+  return { data: results.map(toSearchResult), page, total_pages };
 }
 
 /**
@@ -125,16 +159,20 @@ export async function getNewReleases(): Promise<TmdbMovie[]> {
 
 /**
  * Searches TMDB for films matching the query, upserts results into the local
- * films cache, and returns the TMDB response directly.
+ * films cache, and returns a paginated FilmSearchResult response.
  * @param searchQuery - The user-provided search term.
- * @returns An array of TmdbMovie objects.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns A PaginatedFilmsResult.
  */
-export async function searchFilms(searchQuery: string): Promise<TmdbMovie[]> {
-  const films = await tmdbService.searchFilms(searchQuery);
-  for (const film of films) {
+export async function searchFilms(
+  searchQuery: string,
+  page: number,
+): Promise<PaginatedFilmsResult> {
+  const { results, total_pages } = await tmdbService.searchFilms(searchQuery, page);
+  for (const film of results) {
     await upsertFilm(film);
   }
-  return films;
+  return { data: results.map(toSearchResult), page, total_pages };
 }
 
 /**

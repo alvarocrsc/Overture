@@ -18,11 +18,30 @@ interface TmdbPagedResponse<T> {
 
 /**
  * Fetches the trending films for the current week from TMDB.
- * @returns An array of TmdbMovie objects.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns The results array and total page count.
  */
-export async function getTrendingFilms(): Promise<TmdbMovie[]> {
-  const data = await tmdbFetch<TmdbPagedResponse<TmdbMovie>>('/trending/movie/week');
-  return data.results;
+export async function getTrendingFilms(
+  page: number,
+): Promise<{ results: TmdbMovie[]; total_pages: number }> {
+  const data = await tmdbFetch<TmdbPagedResponse<TmdbMovie>>('/trending/movie/week', {
+    page: String(page),
+  });
+  return { results: data.results, total_pages: data.total_pages };
+}
+
+/**
+ * Fetches the top-rated films from TMDB.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns The results array and total page count.
+ */
+export async function getTopRatedFilms(
+  page: number,
+): Promise<{ results: TmdbMovie[]; total_pages: number }> {
+  const data = await tmdbFetch<TmdbPagedResponse<TmdbMovie>>('/movie/top_rated', {
+    page: String(page),
+  });
+  return { results: data.results, total_pages: data.total_pages };
 }
 
 /**
@@ -37,13 +56,18 @@ export async function getNewReleases(): Promise<TmdbMovie[]> {
 /**
  * Searches TMDB for films matching the given query string.
  * @param searchQuery - The user-provided search term.
- * @returns An array of TmdbMovie objects.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns The results array and total page count.
  */
-export async function searchFilms(searchQuery: string): Promise<TmdbMovie[]> {
+export async function searchFilms(
+  searchQuery: string,
+  page: number,
+): Promise<{ results: TmdbMovie[]; total_pages: number }> {
   const data = await tmdbFetch<TmdbPagedResponse<TmdbMovie>>('/search/movie', {
     query: searchQuery,
+    page: String(page),
   });
-  return data.results;
+  return { results: data.results, total_pages: data.total_pages };
 }
 
 /**

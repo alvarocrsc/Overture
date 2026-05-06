@@ -17,9 +17,17 @@ function parseTmdbId(req: Request): number {
 }
 
 /** GET /api/v1/films/trending */
-export async function getTrendingFilms(_req: Request, res: Response): Promise<void> {
-  const data = await filmsService.getTrendingFilms();
-  res.status(200).json({ data });
+export async function getTrendingFilms(req: Request, res: Response): Promise<void> {
+  const page = Math.max(1, Number(req.query['page']) || 1);
+  const result = await filmsService.getTrendingFilms(page);
+  res.status(200).json(result);
+}
+
+/** GET /api/v1/films/top-rated */
+export async function getTopRatedFilms(req: Request, res: Response): Promise<void> {
+  const page = Math.max(1, Number(req.query['page']) || 1);
+  const result = await filmsService.getTopRatedFilms(page);
+  res.status(200).json(result);
 }
 
 /** GET /api/v1/films/new-releases */
@@ -30,12 +38,13 @@ export async function getNewReleases(_req: Request, res: Response): Promise<void
 
 /** GET /api/v1/films/search */
 export async function searchFilms(req: Request, res: Response): Promise<void> {
-  const { q } = req.query;
+  const { q, page: rawPage } = req.query;
   if (!q || typeof q !== 'string' || q.trim() === '') {
     throw new AppError('Query required', 400);
   }
-  const data = await filmsService.searchFilms(q.trim());
-  res.status(200).json({ data });
+  const page = Math.max(1, Number(rawPage) || 1);
+  const result = await filmsService.searchFilms(q.trim(), page);
+  res.status(200).json(result);
 }
 
 /** GET /api/v1/films/:tmdbId */

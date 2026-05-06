@@ -10,9 +10,15 @@ for (const key of requiredEnvVars) {
   }
 }
 
+// On macOS/Linux with MySQL 8.4+, caching_sha2_password over TCP requires
+// SSL which mysql2 doesn't negotiate by default. Connecting via Unix socket
+// bypasses the SSL requirement while keeping the same auth plugin.
+const socketPath = process.env['DB_SOCKET'];
+
 const pool = mysql.createPool({
-  host: process.env['DB_HOST'],
-  port: Number(process.env['DB_PORT']),
+  ...(socketPath
+    ? { socketPath }
+    : { host: process.env['DB_HOST'], port: Number(process.env['DB_PORT']) }),
   user: process.env['DB_USER'],
   password: process.env['DB_PASSWORD'] ?? '',
   database: process.env['DB_NAME'],
