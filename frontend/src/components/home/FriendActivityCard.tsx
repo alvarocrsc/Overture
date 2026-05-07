@@ -1,0 +1,129 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Colors, FontFamily } from '@/src/lib/colors';
+import { posterUrl } from '@/src/lib/tmdb';
+import StarRating from './StarRating';
+
+interface Props {
+  /** TMDB poster file path (e.g. "/abc123.jpg"). */
+  posterPath: string | null;
+  /** Film title. */
+  filmTitle: string;
+  /** Username to display below the poster. */
+  username: string;
+  /** Avatar image URL for the friend. */
+  avatarUrl: string | null;
+  /** Rating the friend gave (0–5 in 0.5 increments). */
+  rating: number;
+  onPress?: () => void;
+}
+
+/**
+ * Card in the Friends' Activity carousel showing a poster the friend
+ * recently watched, their avatar, username, and star rating.
+ */
+export default function FriendActivityCard({
+  posterPath,
+  filmTitle,
+  username,
+  avatarUrl,
+  rating,
+  onPress,
+}: Props) {
+  const uri = posterUrl(posterPath, 'w185');
+
+  return (
+    <Pressable style={styles.card} onPress={onPress} onPressIn={() => {}}>
+      {/* Poster */}
+      <View style={styles.posterWrapper}>
+        <Image
+          source={uri ? { uri } : undefined}
+          style={styles.poster}
+          contentFit="cover"
+          placeholder={Colors.cardBackground}
+        />
+      </View>
+
+      {/* Avatar + username row */}
+      <View style={styles.meta}>
+        <View style={styles.avatarWrapper}>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.avatar}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]} />
+          )}
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.username} numberOfLines={1}>
+            {username}
+          </Text>
+          <StarRating rating={rating} size={9} />
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+const POSTER_WIDTH = 90;
+const POSTER_HEIGHT = 135;
+const AVATAR_SIZE = 24;
+const CARD_GAP = 6;
+
+const styles = StyleSheet.create({
+  card: {
+    width: POSTER_WIDTH,
+    marginRight: CARD_GAP,
+  },
+  posterWrapper: {
+    width: POSTER_WIDTH,
+    height: POSTER_HEIGHT,
+    borderRadius: 5,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  poster: {
+    width: POSTER_WIDTH,
+    height: POSTER_HEIGHT,
+    borderRadius: 5,
+  },
+  meta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  avatarWrapper: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    overflow: 'hidden',
+    marginRight: 5,
+    flexShrink: 0,
+  },
+  avatar: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+  },
+  avatarFallback: {
+    backgroundColor: Colors.accentBlue,
+  },
+  userInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  username: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: Colors.white,
+    letterSpacing: -1,
+  },
+});

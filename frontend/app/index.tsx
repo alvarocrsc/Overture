@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import type { Href } from 'expo-router';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors } from '@/src/lib/colors';
 
@@ -17,11 +16,9 @@ export default function IndexScreen(): React.JSX.Element {
     if (isLoading) return;
 
     if (isAuthenticated) {
-      // Typed routes for (tabs)/home don't exist yet — cast is intentional.
-      router.replace('/(tabs)' as unknown as Href);
+      router.replace('/home');
     } else {
-      // Typed routes for (auth)/welcome don't exist yet — cast is intentional.
-      router.replace('/(auth)/welcome' as unknown as Href);
+      router.replace('/welcome');
     }
   }, [isLoading, isAuthenticated]);
 

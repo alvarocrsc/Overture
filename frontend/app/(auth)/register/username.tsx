@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import type { Href } from 'expo-router';
 import { InvisibleInput } from '@/src/components/auth/InvisibleInput';
 import { OnboardingScreen } from '@/src/components/auth/OnboardingScreen';
 import { useAuth } from '@/src/context/AuthContext';
@@ -43,7 +42,7 @@ export default function RegisterUsernameScreen(): React.JSX.Element {
     setError(null);
     try {
       await register(localUsername, email, password);
-      router.push('/(auth)/register/profile-picture' as unknown as Href);
+      router.push('/register/profile-picture');
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??

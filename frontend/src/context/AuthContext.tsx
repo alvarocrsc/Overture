@@ -5,7 +5,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import api from '../lib/api';
 import { clearToken, getToken, setToken } from '../lib/token';
 
@@ -88,8 +88,20 @@ export default function AuthProvider({
   }, []);
 
   /**
+   * Stores credentials in memory and SecureStore without navigating.
+   * Used by both login and register so navigation stays with the caller.
+   */
+  const applyCredentials = useCallback(
+    async (accessToken: string, userData: User): Promise<void> => {
+      await setToken(accessToken);
+      setUser(userData);
+    },
+    [],
+  );
+
+  /**
    * Authenticates the user with email and password.
-   * Stores the access token and navigates to the home tab on success.
+   * Stores the access token and navigates to the home screen on success.
    * @throws The raw axios error on failure, so the form can display it.
    */
   const login = useCallback(
@@ -98,15 +110,15 @@ export default function AuthProvider({
         email,
         password,
       });
-      await setToken(res.data.data.accessToken);
-      setUser(res.data.data.user);
-      router.replace('/(tabs)' as unknown as Href);
+      await applyCredentials(res.data.data.accessToken, res.data.data.user);
+      router.replace('/home');
     },
-    [],
+    [applyCredentials],
   );
 
   /**
-   * Registers a new account, then immediately logs in.
+   * Registers a new account and authenticates, but does NOT navigate.
+   * The calling screen is responsible for navigating after success.
    * @throws The raw axios error on failure, so the form can display it.
    */
   const register = useCallback(
@@ -116,9 +128,13 @@ export default function AuthProvider({
       password: string,
     ): Promise<void> => {
       await api.post('/auth/register', { username, email, password });
-      await login(email, password);
+      const res = await api.post<LoginResponseData>('/auth/login', {
+        email,
+        password,
+      });
+      await applyCredentials(res.data.data.accessToken, res.data.data.user);
     },
-    [login],
+    [applyCredentials],
   );
 
   /**
@@ -131,7 +147,7 @@ export default function AuthProvider({
     });
     await clearToken();
     setUser(null);
-    router.replace('/(auth)/login' as unknown as Href);
+    router.replace('/login');
   }, []);
 
   const value: AuthContextType = {

@@ -19,7 +19,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import type { Href } from 'expo-router';
 import { OnboardingScreen } from '@/src/components/auth/OnboardingScreen';
 import { useRegister } from '@/src/context/RegisterContext';
 import { useTopRatedFilms, useSearchFilms } from '@/src/hooks/useFilms';
@@ -34,7 +33,7 @@ import {
   Spacing,
 } from '@/src/lib/colors';
 
-const HOME_ROUTE = '/(tabs)' as unknown as Href;
+const HOME_ROUTE = '/home';
 
 /**
  * Register step 5 — pick 4 favourite films.

@@ -31,6 +31,14 @@ export const Colors = {
   inputBorder: '#FFFFFF',
   /** Search bar background — transparent */
   searchBackground: 'transparent',
+  /** Divides bar — friends who liked it */
+  dividesGood: '#1d9e75',
+  /** Divides bar — friends who disliked it */
+  dividesBad: '#e24b4a',
+  /** Film/series card background */
+  cardBackground: '#171717',
+  /** Star rating fill */
+  starGold: '#F5B800',
 } as const;
 
 // ─── Typography ──────────────────────────────────────────────────────────────
@@ -39,6 +47,8 @@ export const FontFamily = {
   black: 'Geist_900Black',
   extraBold: 'Geist_800ExtraBold',
   bold: 'Geist_700Bold',
+  semiBold: 'Geist_600SemiBold',
+  medium: 'Geist_500Medium',
   regular: 'Geist_400Regular',
   light: 'Geist_300Light',
 } as const;
@@ -74,6 +84,16 @@ export const Radius = {
   searchBar: 50,
   avatar: 100,
 } as const;
+
+// ─── Tab Bar ─────────────────────────────────────────────────────────────────
+
+/** Height of the floating tab bar in pixels. */
+export const TAB_BAR_HEIGHT = 55;
+
+/** Gap between the tab bar bottom and the device safe area. */
+export const TAB_BAR_BOTTOM_OFFSET = 0;
+
+// ─── Dimensions ───────────────────────────────────────────────────────────────
 
 export const Dimensions = {
   /** Progress bar outer track */
