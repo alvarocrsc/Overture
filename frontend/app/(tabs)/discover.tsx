@@ -33,10 +33,10 @@ export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const { data: trendingRaw, isLoading: trendingLoading } = useTrending('films');
 
-  // Tapping the search bar must NOT open a keyboard — it routes to the
-  // dedicated Search (Log) tab where the actual TextInput lives.
+  // Tapping the search bar routes to the Log tab and immediately focuses
+  // its TextInput so the user can start typing without an extra tap.
   function handleSearchPress() {
-    router.push('/(tabs)/log');
+    router.push({ pathname: '/(tabs)/log', params: { focus: 'true' } });
   }
 
   function handleNotificationPress() {

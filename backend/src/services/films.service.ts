@@ -1,9 +1,10 @@
 import { query, execute } from '../config/db';
 import * as tmdbService from './tmdb.service';
+import { tmdbFetch } from '../config/tmdb';
 import { AppError } from '../utils/app-error';
 import type { Film } from '../models/film.model';
 import type { FilmCredit } from '../models/film-credit.model';
-import type { TmdbMovie, TmdbImage, TmdbVideo } from '../types/tmdb.types';
+import type { TmdbMovie, TmdbImage, TmdbVideo, TmdbCreditsResult } from '../types/tmdb.types';
 
 /** A film row projected for search/discovery responses. */
 export interface FilmSearchResult {
@@ -18,6 +19,8 @@ export interface FilmSearchResult {
   release_date?: string | null;
   /** TMDB vote_average (0–10 scale). */
   tmdb_rating?: number | null;
+  /** Director name resolved from TMDB credits. May be null on slim projections. */
+  director?: string | null;
 }
 
 /** Paginated response returned by trending and search endpoints. */
@@ -128,7 +131,7 @@ function toSearchResult(film: TmdbMovie): FilmSearchResult {
  * Maps a TmdbMovie to a FilmSearchResult enriched with the fields needed by
  * the Discover trending carousel: backdrop, overview, release_date, rating.
  */
-function toTrendingResult(film: TmdbMovie): FilmSearchResult {
+function toTrendingResult(film: TmdbMovie, director: string | null): FilmSearchResult {
   return {
     tmdb_id: film.id,
     title: film.title,
@@ -137,7 +140,18 @@ function toTrendingResult(film: TmdbMovie): FilmSearchResult {
     overview: film.overview,
     release_date: film.release_date || null,
     tmdb_rating: film.vote_average ?? null,
+    director,
   };
+}
+
+/** Looks up the director name for a single film via TMDB credits. */
+async function resolveDirector(tmdbId: number): Promise<string | null> {
+  try {
+    const credits = await tmdbFetch<TmdbCreditsResult>(`/movie/${tmdbId}/credits`);
+    return credits.crew.find((c) => c.job === 'Director')?.name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -151,7 +165,12 @@ export async function getTrendingFilms(page: number): Promise<PaginatedFilmsResu
   for (const film of results) {
     await upsertFilm(film);
   }
-  return { data: results.map(toTrendingResult), page, total_pages };
+  const directors = await Promise.all(results.map((f) => resolveDirector(f.id)));
+  return {
+    data: results.map((film, i) => toTrendingResult(film, directors[i] ?? null)),
+    page,
+    total_pages,
+  };
 }
 
 /**

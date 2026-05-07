@@ -1,0 +1,19 @@
+import React from 'react';
+import Svg, { Path } from 'react-native-svg';
+
+interface Props {
+  size?: number;
+  color?: string;
+}
+
+export default function SeriesIcon({ size = 9, color = 'white' }: Props) {
+  const height = Math.round((size * 8) / 9);
+  return (
+    <Svg width={size} height={height} viewBox="0 0 9 8" fill="none">
+      <Path
+        d="M1 1V4.75H8V1H1ZM0 1C0 0.448438 0.448438 0 1 0H8C8.55156 0 9 0.448438 9 1V4.75C9 5.30156 8.55156 5.75 8 5.75H1C0.448438 5.75 0 5.30156 0 4.75V1ZM2.5 6.5H6.5C6.77656 6.5 7 6.72344 7 7C7 7.27656 6.77656 7.5 6.5 7.5H2.5C2.22344 7.5 2 7.27656 2 7C2 6.72344 2.22344 6.5 2.5 6.5Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}

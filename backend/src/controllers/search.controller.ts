@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import * as searchService from '../services/search.service';
 import { AppError } from '../utils/app-error';
 
@@ -8,8 +9,7 @@ export async function search(req: Request, res: Response): Promise<void> {
   const rawType = typeof req.query['type'] === 'string' ? req.query['type'] : undefined;
   const limit = Math.min(Number(req.query['limit'] ?? 10) || 10, 20);
   const page = Math.max(Number(req.query['page'] ?? 1) || 1, 1);
-  const userId = req.user!.userId;
-  const result = await searchService.search(userId, rawQ, rawType, limit, page);
+  const result = await searchService.search(rawQ, rawType, limit, page);
   res.status(200).json(result);
 }
 
@@ -34,4 +34,31 @@ export async function clearRecentSearches(req: Request, res: Response): Promise<
   const userId = req.user!.userId;
   await searchService.clearRecentSearches(userId);
   res.status(200).json({ message: 'Search history cleared' });
+}
+
+const recordRecentSchema = z.object({
+  type: z.enum(['film', 'series', 'person', 'list', 'member']),
+  resultId: z.number().int().positive(),
+  displayTitle: z.string().min(1).max(255),
+  primary: z.string().max(255).nullable().optional(),
+  secondary: z.string().max(255).nullable().optional(),
+  thumbnailUrl: z.string().max(500).nullable().optional(),
+});
+
+/** POST /api/v1/search/recent — records a tap on a search result. */
+export async function recordRecentSearch(req: Request, res: Response): Promise<void> {
+  const parsed = recordRecentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new AppError(parsed.error.issues[0]?.message ?? 'Invalid payload', 400);
+  }
+  const userId = req.user!.userId;
+  await searchService.recordRecentSearch(userId, {
+    type: parsed.data.type,
+    resultId: parsed.data.resultId,
+    displayTitle: parsed.data.displayTitle,
+    primary: parsed.data.primary ?? null,
+    secondary: parsed.data.secondary ?? null,
+    thumbnailUrl: parsed.data.thumbnailUrl ?? null,
+  });
+  res.status(201).json({ message: 'Recent search recorded' });
 }

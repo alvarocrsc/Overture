@@ -2,9 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/src/lib/api';
 
 /**
- * Raw shape returned by GET /films/trending. Backend enriches the trending
- * projection with backdrop, overview, release_date and tmdb_rating beyond
- * the slim search-result shape used elsewhere.
+ * Raw shape returned by GET /films/trending. 
  */
 export interface TrendingFilmRaw {
   tmdb_id: number;
@@ -14,6 +12,7 @@ export interface TrendingFilmRaw {
   overview: string;
   release_date: string | null;
   tmdb_rating: number | null;
+  director?: string | null;
 }
 
 interface PaginatedTrendingResponse {
