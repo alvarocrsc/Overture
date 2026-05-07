@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
 import { FullStarIcon } from '@/src/components/icons/FullStarIcon';
+import { UserAvatar } from '@/src/components/shared/UserAvatar';
 
 interface Props {
   /** TMDB poster file path for the film. */
@@ -22,6 +23,10 @@ interface Props {
   worstAvatarUrl: string | null;
   /** Avatar URL of the friend who rated it best. */
   bestAvatarUrl: string | null;
+  /** Username of the friend who rated it worst. */
+  worstUsername: string;
+  /** Username of the friend who rated it best. */
+  bestUsername: string;
   /** Number of friends who watched it. */
   friendCount: number;
   /** Difference between best and worst rating (spread). */
@@ -48,6 +53,8 @@ export default function DividesCard({
   bestRating,
   worstAvatarUrl,
   bestAvatarUrl,
+  worstUsername,
+  bestUsername,
   friendCount,
   ratingSpread,
   onSeeDebate,
@@ -88,17 +95,7 @@ export default function DividesCard({
         <View style={styles.ratersRow}>
           {/* Worst rater */}
           <View style={styles.raterGroup}>
-            <View style={styles.raterAvatar}>
-              {worstAvatarUrl ? (
-                <Image
-                  source={{ uri: worstAvatarUrl }}
-                  style={styles.raterAvatarImage}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={[styles.raterAvatarImage, { backgroundColor: Colors.dividesBad }]} />
-              )}
-            </View>
+            <UserAvatar avatarUrl={worstAvatarUrl} username={worstUsername} size={AVATAR_SIZE} />
             <FullStarIcon size={12} color={Colors.accentBlue} />
             <Text style={styles.ratingNumber}>{worstRating.toFixed(1)}</Text>
           </View>
@@ -107,19 +104,7 @@ export default function DividesCard({
           <View style={styles.raterGroup}>
             <FullStarIcon size={12} color={Colors.accentBlue} />
             <Text style={styles.ratingNumber}>{bestRating.toFixed(1)}</Text>
-            <View style={styles.raterAvatar}>
-              {bestAvatarUrl ? (
-                <Image
-                  source={{ uri: bestAvatarUrl }}
-                  style={styles.raterAvatarImage}
-                  contentFit="cover"
-                />
-              ) : (
-                <View
-                  style={[styles.raterAvatarImage, { backgroundColor: Colors.dividesGood }]}
-                />
-              )}
-            </View>
+            <UserAvatar avatarUrl={bestAvatarUrl} username={bestUsername} size={AVATAR_SIZE} />
           </View>
         </View>
 
@@ -211,17 +196,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-  },
-  raterAvatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    overflow: 'hidden',
-  },
-  raterAvatarImage: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
   },
   ratingNumber: {
     fontFamily: FontFamily.semiBold,

@@ -7,8 +7,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { UserAvatar } from '@/src/components/shared/UserAvatar';
 
 import HomeIcon from '@/src/components/icons/HomeIcon';
 import DiscoverIcon from '@/src/components/icons/DiscoverIcon';
@@ -67,22 +67,13 @@ export default function TabBar({ state, descriptors, navigation }: BottomTabBarP
         return <StatsIcon size={25} color={iconColor} />;
       case 4:
         return (
-          <View
-            style={[
-              styles.avatarRing,
-              isActive ? styles.avatarRingActive : styles.avatarRingInactive,
-            ]}
-          >
-            {user?.avatar_url ? (
-              <Image
-                source={{ uri: user.avatar_url }}
-                style={styles.avatarImage}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.avatarImage, styles.avatarFallback]} />
-            )}
-          </View>
+          <UserAvatar
+            avatarUrl={user?.avatar_url ?? null}
+            username={user?.username ?? ''}
+            size={32}
+            borderColor={isActive ? Colors.accentBlue : 'rgba(255,255,255,0.3)'}
+            borderWidth={2}
+          />
         );
       default:
         return null;
@@ -184,28 +175,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: TAB_BAR_HEIGHT,
   },
-  avatarRing: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarRingActive: {
-    borderWidth: 2,
-    borderColor: Colors.accentBlue,
-  },
-  avatarRingInactive: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.30)',
-  },
-  avatarImage: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-  },
-  avatarFallback: {
-    backgroundColor: Colors.accentBlue,
-  },
+
 });

@@ -23,6 +23,8 @@ export interface DividesEntry {
   bestRating: number;
   worstAvatarUrl: string | null;
   bestAvatarUrl: string | null;
+  worstUsername: string;
+  bestUsername: string;
   friendCount: number;
   ratingSpread: number;
 }
@@ -32,7 +34,7 @@ export const MOCK_FRIENDS_ACTIVITY: FriendActivity[] = [
     id: 1,
     posterPath: '/jSziioSwPVrOy9Yow3XhWIBDjq1.jpg',
     filmTitle: 'Fight Club',
-    username: 'amestris',
+    username: 'amesttris',
     userId: 2,
     avatarUrl: null,
     rating: 4.5,
@@ -81,6 +83,8 @@ export const MOCK_DIVIDES: DividesEntry[] = [
     bestRating: 5.0,
     worstAvatarUrl: null,
     bestAvatarUrl: null,
+    worstUsername: 'deeimos',
+    bestUsername: 'amesttris',
     friendCount: 6,
     ratingSpread: 2.5,
   },
@@ -94,6 +98,8 @@ export const MOCK_DIVIDES: DividesEntry[] = [
     bestRating: 5.0,
     worstAvatarUrl: null,
     bestAvatarUrl: null,
+    worstUsername: 'rt16',
+    bestUsername: 'carvajal',
     friendCount: 8,
     ratingSpread: 3.0,
   },
@@ -107,6 +113,8 @@ export const MOCK_DIVIDES: DividesEntry[] = [
     bestRating: 4.5,
     worstAvatarUrl: null,
     bestAvatarUrl: null,
+    worstUsername: 'amestris',
+    bestUsername: 'deeimos',
     friendCount: 5,
     ratingSpread: 3.5,
   },
@@ -120,6 +128,8 @@ export const MOCK_DIVIDES: DividesEntry[] = [
     bestRating: 5.0,
     worstAvatarUrl: null,
     bestAvatarUrl: null,
+    worstUsername: 'rt16',
+    bestUsername: 'amesttris',
     friendCount: 4,
     ratingSpread: 3.5,
   },

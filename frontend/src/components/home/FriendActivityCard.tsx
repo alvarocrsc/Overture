@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
 import StarRating from './StarRating';
+import { UserAvatar } from '@/src/components/shared/UserAvatar';
 
 interface Props {
   /** TMDB poster file path (e.g. "/abc123.jpg"). */
@@ -47,16 +48,8 @@ export default function FriendActivityCard({
 
       {/* Avatar + username row */}
       <View style={styles.meta}>
-        <View style={styles.avatarWrapper}>
-          {avatarUrl ? (
-            <Image
-              source={{ uri: avatarUrl }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]} />
-          )}
+        <View style={styles.avatarSlot}>
+          <UserAvatar avatarUrl={avatarUrl} username={username} size={AVATAR_SIZE} />
         </View>
         <View style={styles.userInfo}>
           <Text style={styles.username} numberOfLines={1}>
@@ -100,21 +93,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 6,
   },
-  avatarWrapper: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    overflow: 'hidden',
+  avatarSlot: {
     marginRight: 5,
     flexShrink: 0,
-  },
-  avatar: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-  },
-  avatarFallback: {
-    backgroundColor: Colors.accentBlue,
   },
   userInfo: {
     flex: 1,

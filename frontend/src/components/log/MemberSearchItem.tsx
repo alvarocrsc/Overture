@@ -1,8 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontFamily } from '@/src/lib/colors';
+import { UserAvatar } from '@/src/components/shared/UserAvatar';
 import type { MemberSearchResult } from '@/src/types/search.types';
 
 interface Props {
@@ -25,17 +25,7 @@ export default function MemberSearchItem({
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <View style={styles.avatar}>
-        {item.avatarUrl ? (
-          <Image
-            source={{ uri: item.avatarUrl }}
-            style={styles.avatarImage}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={styles.avatarFallback} />
-        )}
-      </View>
+      <UserAvatar avatarUrl={item.avatarUrl} username={item.username} size={50} />
 
       <View style={styles.textStack}>
         <Text style={styles.name} numberOfLines={1}>
@@ -86,21 +76,7 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 100,
-    overflow: 'hidden',
-    backgroundColor: '#222',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarFallback: {
-    flex: 1,
-    backgroundColor: '#222',
-  },
+
   textStack: {
     flex: 1,
     paddingLeft: 12,
@@ -118,7 +94,7 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: Colors.accentBlue,
     letterSpacing: -0.5,
-    marginTop: 4,
+    marginTop: -2,
   },
   followPill: {
     flexDirection: 'row',
