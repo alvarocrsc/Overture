@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textMuted,
     lineHeight: 15,
-    marginTop: 2,
+    marginTop: -2.5,
   },
   subtitleAccent: {
     fontFamily: FontFamily.medium,

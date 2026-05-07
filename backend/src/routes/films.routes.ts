@@ -7,6 +7,7 @@ import {
   getFilmById,
   getFilmImages,
   getFilmCredits,
+  getFilmTrailer,
   likeFilm,
   unlikeFilm,
 } from '../controllers/films.controller';
@@ -20,10 +21,14 @@ router.get('/top-rated', getTopRatedFilms);
 router.get('/new-releases', getNewReleases);
 router.get('/search', searchFilms);
 
-router.get('/:tmdbId', getFilmById);
+// Sub-resource routes on /:tmdbId/<resource> must appear before the bare
+// /:tmdbId route to avoid the bare param swallowing the request.
+router.get('/:tmdbId/trailer', getFilmTrailer);
 router.get('/:tmdbId/images', getFilmImages);
 router.get('/:tmdbId/credits', getFilmCredits);
 router.post('/:tmdbId/like', verifyAccessToken, likeFilm);
 router.delete('/:tmdbId/like', verifyAccessToken, unlikeFilm);
+
+router.get('/:tmdbId', getFilmById);
 
 export default router;

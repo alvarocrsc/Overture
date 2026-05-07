@@ -6,6 +6,7 @@ import type {
   TmdbCreditsResult,
   TmdbSeries,
   TmdbSeriesDetail,
+  TmdbVideo,
 } from '../types/tmdb.types';
 
 /** Shape of all TMDB endpoints that return a paginated results array. */
@@ -98,6 +99,16 @@ export async function getFilmImages(tmdbId: number): Promise<TmdbImageResult> {
  */
 export async function getFilmCredits(tmdbId: number): Promise<TmdbCreditsResult> {
   return tmdbFetch<TmdbCreditsResult>(`/movie/${tmdbId}/credits`);
+}
+
+/**
+ * Fetches all videos (trailers, teasers, clips) for a film from TMDB.
+ * @param tmdbId - The TMDB movie ID.
+ * @returns An array of TmdbVideo objects.
+ */
+export async function getFilmVideos(tmdbId: number): Promise<TmdbVideo[]> {
+  const data = await tmdbFetch<{ results: TmdbVideo[] }>(`/movie/${tmdbId}/videos`);
+  return data.results;
 }
 
 // ─── Series (TV) ─────────────────────────────────────────────────────────────

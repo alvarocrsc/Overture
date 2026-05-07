@@ -68,6 +68,13 @@ export async function getFilmCredits(req: Request, res: Response): Promise<void>
   res.status(200).json({ data });
 }
 
+/** GET /api/v1/films/:tmdbId/trailer */
+export async function getFilmTrailer(req: Request, res: Response): Promise<void> {
+  const tmdbId = parseTmdbId(req);
+  const data = await filmsService.getFilmTrailer(tmdbId);
+  res.status(200).json({ data });
+}
+
 /** POST /api/v1/films/:tmdbId/like */
 export async function likeFilm(_req: Request, res: Response): Promise<void> {
   res.status(200).json({ message: 'not implemented yet' });

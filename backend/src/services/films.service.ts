@@ -3,13 +3,21 @@ import * as tmdbService from './tmdb.service';
 import { AppError } from '../utils/app-error';
 import type { Film } from '../models/film.model';
 import type { FilmCredit } from '../models/film-credit.model';
-import type { TmdbMovie, TmdbImage } from '../types/tmdb.types';
+import type { TmdbMovie, TmdbImage, TmdbVideo } from '../types/tmdb.types';
 
 /** A film row projected for search/discovery responses. */
 export interface FilmSearchResult {
   tmdb_id: number;
   title: string;
   poster_path: string | null;
+  /** Backdrop file path. Present on trending/now-playing responses, may be null. */
+  backdrop_path?: string | null;
+  /** Plot synopsis from TMDB. Present on trending/now-playing responses. */
+  overview?: string;
+  /** ISO release date string from TMDB. */
+  release_date?: string | null;
+  /** TMDB vote_average (0–10 scale). */
+  tmdb_rating?: number | null;
 }
 
 /** Paginated response returned by trending and search endpoints. */
@@ -117,6 +125,22 @@ function toSearchResult(film: TmdbMovie): FilmSearchResult {
 }
 
 /**
+ * Maps a TmdbMovie to a FilmSearchResult enriched with the fields needed by
+ * the Discover trending carousel: backdrop, overview, release_date, rating.
+ */
+function toTrendingResult(film: TmdbMovie): FilmSearchResult {
+  return {
+    tmdb_id: film.id,
+    title: film.title,
+    poster_path: film.poster_path,
+    backdrop_path: film.backdrop_path,
+    overview: film.overview,
+    release_date: film.release_date || null,
+    tmdb_rating: film.vote_average ?? null,
+  };
+}
+
+/**
  * Fetches the trending films for the current week, upserts them into the local
  * films cache, and returns a paginated FilmSearchResult response.
  * @param page - The page number to fetch (1-indexed).
@@ -127,7 +151,7 @@ export async function getTrendingFilms(page: number): Promise<PaginatedFilmsResu
   for (const film of results) {
     await upsertFilm(film);
   }
-  return { data: results.map(toSearchResult), page, total_pages };
+  return { data: results.map(toTrendingResult), page, total_pages };
 }
 
 /**
@@ -406,4 +430,20 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
       popularity: m.popularity,
     })),
   };
+}
+
+/**
+ * Returns the official YouTube trailer for a film, or null if none exists.
+ * Filters TMDB's video list to the first entry with site === 'YouTube',
+ * type === 'Trailer', and official === true.
+ * @param tmdbId - The TMDB movie ID.
+ * @returns A TmdbVideo or null.
+ */
+export async function getFilmTrailer(tmdbId: number): Promise<TmdbVideo | null> {
+  const videos = await tmdbService.getFilmVideos(tmdbId);
+  return (
+    videos.find(
+      (v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official,
+    ) ?? null
+  );
 }

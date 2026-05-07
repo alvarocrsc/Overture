@@ -149,3 +149,17 @@ export interface TmdbPersonSearchResponse {
   total_results: number;
   total_pages: number;
 }
+
+/** A single video asset (trailer/teaser/clip) from TMDB's videos endpoint. */
+export interface TmdbVideo {
+  id: string;
+  /** Provider video ID (YouTube video ID for YouTube videos). */
+  key: string;
+  name: string;
+  /** Hosting site, e.g. 'YouTube', 'Vimeo'. */
+  site: string;
+  /** Video category, e.g. 'Trailer', 'Teaser', 'Clip'. */
+  type: string;
+  official: boolean;
+  published_at: string;
+}
