@@ -152,6 +152,19 @@ export function resolvePeriod(raw: string | undefined): StatsPeriod {
 }
 
 /**
+/**
+ * Formats a Date as a local-timezone YYYY-MM-DD string.
+ * Using toISOString() always gives the UTC date, which mismatches the local
+ * dates returned by MySQL's DATE() function when the server is not in UTC.
+ */
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Computes current streak, longest streak, and last-7-days activity from
  * a sorted (DESC) list of distinct activity dates.
  * @param dates - ISO date strings (YYYY-MM-DD) ordered most-recent first.
@@ -168,19 +181,19 @@ function computeStreak(dates: string[]): StreakData {
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    last7.push(dateSet.has(d.toISOString().slice(0, 10)));
+    last7.push(dateSet.has(toLocalDateString(d)));
   }
 
   // Current streak: consecutive days ending today or yesterday
   let current = 0;
-  const startOffset = dateSet.has(today.toISOString().slice(0, 10)) ? 0 : 1;
+  const startOffset = dateSet.has(toLocalDateString(today)) ? 0 : 1;
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - startOffset);
 
   for (let i = 0; i < dates.length; i++) {
     const expected = new Date(startDate);
     expected.setDate(expected.getDate() - i);
-    if (dates[i] === expected.toISOString().slice(0, 10)) {
+    if (dates[i] === toLocalDateString(expected)) {
       current++;
     } else {
       break;
@@ -197,7 +210,7 @@ function computeStreak(dates: string[]): StreakData {
     } else {
       const prev = new Date(asc[i - 1]!);
       prev.setDate(prev.getDate() + 1);
-      if (asc[i] === prev.toISOString().slice(0, 10)) {
+      if (asc[i] === toLocalDateString(prev)) {
         run++;
       } else {
         run = 1;
@@ -318,7 +331,8 @@ export async function getMyStats(
          AND f.release_date IS NOT NULL
          ${df.clause}
        GROUP BY decade
-       ORDER BY decade DESC`,
+       ORDER BY count DESC
+       LIMIT 3`,
       [userId, ...df.params],
     ),
 
