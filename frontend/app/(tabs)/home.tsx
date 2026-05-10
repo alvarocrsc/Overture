@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, TAB_BAR_BOTTOM_OFFSET, TAB_BAR_HEIGHT } from '@/src/lib/colors';
 import { backdropUrl } from '@/src/lib/tmdb';
+import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
 
 import HomeHeader from '@/src/components/home/HomeHeader';
 import SectionHeader from '@/src/components/home/SectionHeader';
@@ -21,6 +22,7 @@ const PLACEHOLDER_BACKDROP = backdropUrl('/8EmbaG1ydsmMakFWwD0MeEudAgz.jpg', 'w1
 export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<'films' | 'series'>('films');
   const insets = useSafeAreaInsets();
+  const overlay = useOverlayNavigator();
 
   const { data: newFilms } = useNewFilms();
   const { data: newSeries } = useNewSeries();
@@ -58,8 +60,12 @@ export default function HomeScreen() {
                 posterPath={item.posterPath}
                 filmTitle={item.filmTitle}
                 username={item.username}
+                userId={item.userId}
                 avatarUrl={item.avatarUrl}
                 rating={item.rating}
+                onAvatarPress={() =>
+                  overlay.present('user', { id: item.userId })
+                }
               />
             ))}
           </HorizontalCarousel>

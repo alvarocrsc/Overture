@@ -60,6 +60,8 @@ export interface MemberResult {
   username: string;
   name: string | null;
   avatar_url: string | null;
+  /** Present for authenticated requests; true when the viewer already follows this user. */
+  is_following?: boolean;
   media_type: 'member';
 }
 
@@ -71,6 +73,8 @@ export interface RecentSearchRow {
   display_subtitle: string | null;
   thumbnail_url: string | null;
   searched_at: Date;
+  /** Only populated for member-type entries; 1 = following, null = not following. */
+  is_following: 1 | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,6 +279,7 @@ async function fetchMemberResults(
   q: string,
   limit: number,
   page: number,
+  viewerId: number | null = null,
 ): Promise<{ results: MemberResult[]; total: number }> {
   const offset = (page - 1) * limit;
 
@@ -287,15 +292,27 @@ async function fetchMemberResults(
   // COUNT(*) always returns a row — non-null assertion is safe.
   const total = countRow!.total;
 
-  const rows = await query<MemberDbRow>(
-    `SELECT id, username, name, avatar_url
-     FROM users
-     WHERE username LIKE CONCAT('%', ?, '%') OR name LIKE CONCAT('%', ?, '%')
+  interface MemberWithFollow extends MemberDbRow {
+    is_following: number | null;
+  }
+
+  const rows = await query<MemberWithFollow>(
+    `SELECT u.id, u.username, u.name, u.avatar_url,
+            ${viewerId != null ? `(SELECT 1 FROM follows WHERE follower_id = ? AND following_id = u.id LIMIT 1)` : 'NULL'} AS is_following
+     FROM users u
+     WHERE u.username LIKE CONCAT('%', ?, '%') OR u.name LIKE CONCAT('%', ?, '%')
      LIMIT ${limit} OFFSET ${offset}`,
-    [q, q],
+    viewerId != null ? [viewerId, q, q] : [q, q],
   );
 
-  const results = rows.map((r) => ({ ...r, media_type: 'member' as const }));
+  const results: MemberResult[] = rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    name: r.name,
+    avatar_url: r.avatar_url,
+    ...(viewerId != null ? { is_following: r.is_following === 1 } : {}),
+    media_type: 'member' as const,
+  }));
   return { results, total };
 }
 
@@ -322,6 +339,7 @@ async function runTypedSearch(
   type: RecentType,
   limit: number,
   page: number,
+  viewerId: number | null = null,
 ): Promise<{ data: TypedSearchResult[]; total: number; page: number; limit: number }> {
   switch (type) {
     case 'film': {
@@ -341,7 +359,7 @@ async function runTypedSearch(
       return { data: results, total, page, limit };
     }
     case 'member': {
-      const { results, total } = await fetchMemberResults(q, limit, page);
+      const { results, total } = await fetchMemberResults(q, limit, page, viewerId);
       return { data: results, total, page, limit };
     }
     default: {
@@ -377,13 +395,16 @@ async function runMediaSearch(
   };
 }
 
-async function runAllSearch(q: string): Promise<{ data: AllSearchData }> {
+async function runAllSearch(
+  q: string,
+  viewerId: number | null = null,
+): Promise<{ data: AllSearchData }> {
   const [films, series, people, lists, members] = await Promise.all([
     fetchFilmResults(q, 5, 1),
     fetchSeriesResults(q, 5, 1),
     fetchPersonResults(q, 5, 1),
     fetchListResults(q, 5, 1),
-    fetchMemberResults(q, 5, 1),
+    fetchMemberResults(q, 5, 1, viewerId),
   ]);
 
   return {
@@ -417,6 +438,7 @@ export async function search(
   rawType: string | undefined,
   limit: number,
   page: number,
+  viewerId: number | null = null,
 ): Promise<SearchResponse> {
   const q = rawQ.trim();
   if (!q) throw new AppError('Query required', 400);
@@ -425,12 +447,12 @@ export async function search(
   const clampedLimit = Math.min(limit, 20);
 
   if (type === 'all') {
-    return runAllSearch(q);
+    return runAllSearch(q, viewerId);
   }
   if (type === 'media') {
     return runMediaSearch(q, clampedLimit, page);
   }
-  return runTypedSearch(q, type, clampedLimit, page);
+  return runTypedSearch(q, type, clampedLimit, page, viewerId);
 }
 
 /** Input shape for recording a recent search entry. */
@@ -468,18 +490,23 @@ export async function recordRecentSearch(
 }
 
 /**
- * Returns the 10 most recent search entries for the user.
+ * Returns the 10 most recent search entries for the user, with `is_following`
+ * added for member-type entries via a correlated subquery.
  * @param userId - The authenticated user's ID.
  * @returns Recent search rows ordered by most recent first.
  */
 export async function getRecentSearches(userId: number): Promise<RecentSearchRow[]> {
   return query<RecentSearchRow>(
-    `SELECT id, type, result_id, display_title, display_subtitle, thumbnail_url, searched_at
+    `SELECT id, type, result_id, display_title, display_subtitle, thumbnail_url, searched_at,
+            CASE WHEN type = 'member'
+              THEN (SELECT 1 FROM follows WHERE follower_id = ? AND following_id = result_id LIMIT 1)
+              ELSE NULL
+            END AS is_following
      FROM recent_searches
      WHERE user_id = ?
      ORDER BY searched_at DESC
      LIMIT 10`,
-    [userId],
+    [userId, userId],
   );
 }
 

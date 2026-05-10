@@ -8,6 +8,7 @@ import type { MemberSearchResult } from '@/src/types/search.types';
 interface Props {
   item: MemberSearchResult;
   isFollowing?: boolean;
+  showFollowButton?: boolean;
   onPress: () => void;
   onFollowPress: () => void;
   onRemove?: () => void;
@@ -16,6 +17,7 @@ interface Props {
 export default function MemberSearchItem({
   item,
   isFollowing,
+  showFollowButton = true,
   onPress,
   onFollowPress,
   onRemove,
@@ -36,23 +38,25 @@ export default function MemberSearchItem({
         </Text>
       </View>
 
-      <Pressable
-        onPress={onFollowPress}
-        style={({ pressed }) => [
-          styles.followPill,
-          isFollowing && styles.followPillActive,
-          pressed && styles.pressed,
-        ]}
-        hitSlop={6}
-      >
-        <Ionicons
-          name={isFollowing ? 'checkmark' : 'person-add-outline'}
-          size={12}
-          color={Colors.white}
-          style={styles.followIcon}
-        />
-        <Text style={styles.followLabel}>{isFollowing ? 'Following' : 'Follow'}</Text>
-      </Pressable>
+      {showFollowButton && (
+        <Pressable
+          onPress={onFollowPress}
+          style={({ pressed }) => [
+            styles.followPill,
+            isFollowing && styles.followPillActive,
+            pressed && styles.pressed,
+          ]}
+          hitSlop={6}
+        >
+          <Ionicons
+            name={isFollowing ? 'checkmark' : 'person-add-outline'}
+            size={12}
+            color={Colors.white}
+            style={styles.followIcon}
+          />
+          <Text style={styles.followLabel}>{isFollowing ? 'Following' : 'Follow'}</Text>
+        </Pressable>
+      )}
 
       {onRemove && (
         <Pressable

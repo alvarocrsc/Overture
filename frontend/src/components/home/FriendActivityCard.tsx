@@ -13,11 +13,15 @@ interface Props {
   filmTitle: string;
   /** Username to display below the poster. */
   username: string;
+  /** Internal user id of the friend — used for profile navigation. */
+  userId: number;
   /** Avatar image URL for the friend. */
   avatarUrl: string | null;
   /** Rating the friend gave (0–5 in 0.5 increments). */
   rating: number;
   onPress?: () => void;
+  /** Tap on the small avatar — typically navigates to the friend's profile. */
+  onAvatarPress?: () => void;
 }
 
 /**
@@ -28,9 +32,11 @@ export default function FriendActivityCard({
   posterPath,
   filmTitle,
   username,
+  userId,
   avatarUrl,
   rating,
   onPress,
+  onAvatarPress,
 }: Props) {
   const uri = posterUrl(posterPath, 'w185');
 
@@ -48,9 +54,13 @@ export default function FriendActivityCard({
 
       {/* Avatar + username row */}
       <View style={styles.meta}>
-        <View style={styles.avatarSlot}>
+        <Pressable
+          onPress={onAvatarPress}
+          hitSlop={6}
+          style={styles.avatarSlot}
+        >
           <UserAvatar avatarUrl={avatarUrl} username={username} size={AVATAR_SIZE} />
-        </View>
+        </Pressable>
         <View style={styles.userInfo}>
           <Text style={styles.username} numberOfLines={1}>
             {username}

@@ -30,3 +30,33 @@ export function verifyAccessToken(
   req.user = decoded;
   next();
 }
+
+/**
+ * Optional variant of `verifyAccessToken`. Decodes the Bearer token if
+ * present and attaches `req.user`. If the header is missing or invalid,
+ * the request continues anonymously without throwing.
+ */
+export function optionalAccessToken(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    next();
+    return;
+  }
+  const token = authHeader.slice(7);
+  const secret = process.env['JWT_ACCESS_SECRET'];
+  if (!secret) {
+    next();
+    return;
+  }
+  try {
+    const decoded = jwt.verify(token, secret) as AuthPayload;
+    req.user = decoded;
+  } catch {
+    // Silently ignore — treat as anonymous.
+  }
+  next();
+}

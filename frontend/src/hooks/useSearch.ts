@@ -47,6 +47,7 @@ interface MemberApiRow {
   username: string;
   name: string | null;
   avatar_url: string | null;
+  is_following?: boolean;
   media_type: 'member';
 }
 type AnyApiRow = FilmApiRow | SeriesApiRow | PersonApiRow | ListApiRow | MemberApiRow;
@@ -125,6 +126,7 @@ function mapMember(row: MemberApiRow): MemberSearchResult {
     username: row.username,
     displayName: row.name ?? row.username,
     avatarUrl: row.avatar_url,
+    isFollowing: row.is_following,
   };
 }
 

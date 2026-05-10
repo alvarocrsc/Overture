@@ -67,6 +67,8 @@ export interface MemberSearchResult {
   /** Display name; falls back to the username when null on the backend. */
   displayName: string;
   avatarUrl: string | null;
+  /** True when the current user already follows this member. Undefined when unauthenticated. */
+  isFollowing?: boolean;
 }
 
 export type SearchResult =

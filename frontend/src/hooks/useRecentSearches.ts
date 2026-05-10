@@ -10,6 +10,8 @@ interface RecentSearchRow {
   display_title: string | null;
   display_subtitle: string | null;
   thumbnail_url: string | null;
+  /** Only set for member-type entries; 1 = following, null = not following. */
+  is_following: 1 | null;
 }
 
 interface RecentSearchesResponse {
@@ -107,6 +109,7 @@ function mapRecent(row: RecentSearchRow): RecentEntry {
           username: primary ?? title,
           displayName: title,
           avatarUrl: thumb,
+          isFollowing: row.is_following === 1,
         },
       };
   }

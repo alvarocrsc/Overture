@@ -19,6 +19,8 @@ import {
 
 import { useColorScheme } from '@/components/useColorScheme';
 import AuthProvider from '@/src/context/AuthContext';
+import { OverlayNavigatorProvider } from '@/src/context/OverlayNavigatorContext';
+import OverlayHost from '@/src/components/shared/OverlayHost';
 
 const queryClient = new QueryClient();
 
@@ -73,12 +75,15 @@ function RootLayoutNav() {
         <KeyboardProvider>
           <AuthProvider>
             <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-              <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-              </Stack>
+              <OverlayNavigatorProvider>
+                <Stack>
+                  <Stack.Screen name="index" options={{ headerShown: false }} />
+                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                </Stack>
+                <OverlayHost />
+              </OverlayNavigatorProvider>
             </ThemeProvider>
           </AuthProvider>
         </KeyboardProvider>

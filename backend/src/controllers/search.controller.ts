@@ -9,7 +9,8 @@ export async function search(req: Request, res: Response): Promise<void> {
   const rawType = typeof req.query['type'] === 'string' ? req.query['type'] : undefined;
   const limit = Math.min(Number(req.query['limit'] ?? 10) || 10, 20);
   const page = Math.max(Number(req.query['page'] ?? 1) || 1, 1);
-  const result = await searchService.search(rawQ, rawType, limit, page);
+  const viewerId = req.user?.userId ?? null;
+  const result = await searchService.search(rawQ, rawType, limit, page, viewerId);
   res.status(200).json(result);
 }
 

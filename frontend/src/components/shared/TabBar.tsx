@@ -1,179 +1,36 @@
-import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, {
-  useSharedValue,
-  withSpring,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useCallback } from 'react';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { UserAvatar } from '@/src/components/shared/UserAvatar';
 
-import HomeIcon from '@/src/components/icons/HomeIcon';
-import DiscoverIcon from '@/src/components/icons/DiscoverIcon';
-import LogIcon from '@/src/components/icons/LogIcon';
-import StatsIcon from '@/src/components/icons/StatsIcon';
-import { useAuth } from '@/src/context/AuthContext';
-import { Colors, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_OFFSET } from '@/src/lib/colors';
-
-const NUM_TABS = 5;
-const TAB_SLOT_WIDTH = 60; 
-const INDICATOR_WIDTH = 70;
-const INDICATOR_HEIGHT = 46;
-
-function getIndicatorX(index: number, barWidth: number): number {
-  const groupOffset = (barWidth - NUM_TABS * TAB_SLOT_WIDTH) / 2;
-  return groupOffset + index * TAB_SLOT_WIDTH + (TAB_SLOT_WIDTH - INDICATOR_WIDTH) / 2;
-}
-
-const INDICATOR_TOP = (TAB_BAR_HEIGHT - INDICATOR_HEIGHT) / 2;
-const INACTIVE_OPACITY = 0.45;
-
-const ICON_ACTIVE_COLOR = Colors.white;
-const ICON_INACTIVE_COLOR = `rgba(255,255,255,${INACTIVE_OPACITY})`;
+import TabBarUI, { TAB_NAMES, type TabName } from '@/src/components/shared/TabBarUI';
 
 /**
- * Floating frosted-glass tab bar rendered at the bottom of every authenticated screen.
- * Uses Reanimated's withSpring to animate the active indicator pill between tabs.
+ * Adapter that wires `TabBarUI` to React Navigation's bottom-tab navigator.
+ *
+ * The presentational logic (icons, indicator, layout) lives in TabBarUI so
+ * that the OverlayHost can render the same bar in a controlled mode while
+ * a detail screen is presented above the tabs.
  */
-export default function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
-  const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+export default function TabBar({ state, navigation }: BottomTabBarProps): React.JSX.Element {
+  const activeIndex = state.index < TAB_NAMES.length ? state.index : 0;
 
-  const barWidth = useSharedValue(320);
-  const indicatorX = useSharedValue(getIndicatorX(0, 320));
+  const handlePressTab = useCallback(
+    (tab: TabName, isActive: boolean): void => {
+      const targetIndex = TAB_NAMES.indexOf(tab);
+      const route = state.routes[targetIndex];
+      if (!route) return;
 
-  useEffect(() => {
-    const target = getIndicatorX(state.index, barWidth.value);
-    indicatorX.value = withSpring(target, { damping: 50, stiffness: 350 });
-  }, [state.index]);
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: route.key,
+        canPreventDefault: true,
+      });
 
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: indicatorX.value }],
-  }));
-
-  function renderIcon(index: number, isActive: boolean): React.ReactNode {
-    const iconColor = isActive ? ICON_ACTIVE_COLOR : ICON_INACTIVE_COLOR;
-
-    switch (index) {
-      case 0:
-        return <HomeIcon size={25} color={iconColor} />;
-      case 1:
-        return <DiscoverIcon size={20} color={iconColor} />;
-      case 2:
-        return <LogIcon size={25} color={Colors.white} />;
-      case 3:
-        return <StatsIcon size={25} color={iconColor} />;
-      case 4:
-        return (
-          <UserAvatar
-            avatarUrl={user?.avatar_url ?? null}
-            username={user?.username ?? ''}
-            size={32}
-            borderColor={isActive ? Colors.accentBlue : 'rgba(255,255,255,0.3)'}
-            borderWidth={2}
-          />
-        );
-      default:
-        return null;
-    }
-  }
-
-  return (
-    <View
-      style={[styles.wrapper, { bottom: insets.bottom + TAB_BAR_BOTTOM_OFFSET }]}
-      pointerEvents="box-none"
-    >
-      <View
-        style={styles.bar}
-        onLayout={(e) => {
-          const w = e.nativeEvent.layout.width;
-          barWidth.value = w;
-          indicatorX.value = getIndicatorX(state.index, w);
-        }}
-      >
-        {/* Frosted glass background */}
-        <BlurView style={StyleSheet.absoluteFill} intensity={85} tint="dark" />
-        {/* Dark overlay */}
-        <View style={[StyleSheet.absoluteFill, styles.overlay]} />
-
-        {/* Sliding active indicator pill */}
-        <Animated.View style={[styles.indicator, indicatorStyle]} />
-
-        {/* Tab items */}
-        {state.routes.map((route, index) => {
-          const isFocused = state.index === index;
-
-          const onPress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
-
-          const { options } = descriptors[route.key];
-          const accessibilityLabel =
-            options.tabBarAccessibilityLabel ?? route.name;
-
-          return (
-            <Pressable
-              key={route.key}
-              onPress={onPress}
-              style={styles.tabItem}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isFocused }}
-              accessibilityLabel={accessibilityLabel}
-              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-            >
-              {renderIcon(index, isFocused)}
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+      if (!isActive && !event.defaultPrevented) {
+        navigation.navigate(route.name);
+      }
+    },
+    [navigation, state.routes],
   );
+
+  return <TabBarUI activeIndex={activeIndex} onPressTab={handlePressTab} />;
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    position: 'absolute',
-    left: 35,
-    right: 35,
-    height: TAB_BAR_HEIGHT,
-  },
-  bar: {
-    flex: 1,
-    flexDirection: 'row',
-    borderRadius: 50,
-    overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlay: {
-    backgroundColor: 'rgba(0,0,0,0.40)',
-    borderRadius: 50,
-  },
-  indicator: {
-    position: 'absolute',
-    left: 0,
-    top: INDICATOR_TOP,
-    width: INDICATOR_WIDTH,
-    height: INDICATOR_HEIGHT,
-    borderRadius: 25,
-    backgroundColor: 'rgba(126,126,126,0.19)',
-  },
-  tabItem: {
-    width: TAB_SLOT_WIDTH,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: TAB_BAR_HEIGHT,
-  },
-
-});

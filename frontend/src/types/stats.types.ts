@@ -61,6 +61,12 @@ export interface StreakData {
   last_7_days: boolean[];
 }
 
+export interface RatingDistributionEntry {
+  /** Rating value, 0.5–5.0 in 0.5 increments. */
+  value: number;
+  count: number;
+}
+
 export interface StatsResponse {
   period: StatsPeriod;
   overview: StatsOverview;
@@ -70,4 +76,5 @@ export interface StatsResponse {
   most_watched: MostWatchedData;
   calendar: CalendarEntry[];
   streak: StreakData;
+  rating_distribution: RatingDistributionEntry[];
 }
