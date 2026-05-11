@@ -1,6 +1,8 @@
-import { query, execute } from '../config/db';
+import { query, queryMany, execute } from '../config/db';
 import { tmdbFetch } from '../config/tmdb';
 import { AppError } from '../utils/app-error';
+import { upsertFilm } from './films.service';
+import { upsertSeries } from './series.service';
 import type {
   TmdbSearchResponse,
   TmdbTvSearchResponse,
@@ -175,10 +177,59 @@ async function fetchCreator(tmdbId: number): Promise<string | null> {
   }
 }
 
+/**
+ * Overlays the viewer's saved custom poster paths onto a list of search
+ * results keyed by TMDB id. Mutates the array in place. No-op when viewerId
+ * is null or the list is empty.
+ */
+async function applyFilmPosterOverrides(
+  results: Array<{ tmdb_id: number; poster_path: string | null }>,
+  viewerId: number | null,
+): Promise<void> {
+  if (viewerId === null || results.length === 0) return;
+  const ids = results.map((r) => r.tmdb_id);
+  const rows = await queryMany<{ tmdb_id: number; custom_poster_path: string | null }>(
+    `SELECT f.tmdb_id, p.custom_poster_path
+     FROM user_title_display_prefs p
+     JOIN films f ON f.id = p.film_id
+     WHERE p.user_id = ? AND f.tmdb_id IN (?) AND p.custom_poster_path IS NOT NULL`,
+    [viewerId, ids],
+  );
+  if (rows.length === 0) return;
+  const map = new Map(rows.map((r) => [r.tmdb_id, r.custom_poster_path]));
+  for (const r of results) {
+    const override = map.get(r.tmdb_id);
+    if (override) r.poster_path = override;
+  }
+}
+
+/** Same as {@link applyFilmPosterOverrides} but for TV series. */
+async function applySeriesPosterOverrides(
+  results: Array<{ tmdb_id: number; poster_path: string | null }>,
+  viewerId: number | null,
+): Promise<void> {
+  if (viewerId === null || results.length === 0) return;
+  const ids = results.map((r) => r.tmdb_id);
+  const rows = await queryMany<{ tmdb_id: number; custom_poster_path: string | null }>(
+    `SELECT s.tmdb_id, p.custom_poster_path
+     FROM user_title_display_prefs p
+     JOIN series s ON s.id = p.series_id
+     WHERE p.user_id = ? AND s.tmdb_id IN (?) AND p.custom_poster_path IS NOT NULL`,
+    [viewerId, ids],
+  );
+  if (rows.length === 0) return;
+  const map = new Map(rows.map((r) => [r.tmdb_id, r.custom_poster_path]));
+  for (const r of results) {
+    const override = map.get(r.tmdb_id);
+    if (override) r.poster_path = override;
+  }
+}
+
 async function fetchFilmResults(
   q: string,
   limit: number,
   page: number,
+  viewerId: number | null = null,
 ): Promise<{ results: FilmResult[]; total: number }> {
   const data = await tmdbFetch<TmdbSearchResponse>('/search/movie', {
     query: q,
@@ -186,6 +237,8 @@ async function fetchFilmResults(
   });
   const slice = data.results.slice(0, limit);
   const directors = await Promise.all(slice.map((m) => fetchDirector(m.id)));
+  // Upsert into local cache so user_title_display_prefs JOINs resolve.
+  await Promise.all(slice.map((m) => upsertFilm(m)));
   const results = slice.map((m, i) => ({
     tmdb_id: m.id,
     title: m.title,
@@ -195,6 +248,7 @@ async function fetchFilmResults(
     director: directors[i] ?? null,
     media_type: 'film' as const,
   }));
+  await applyFilmPosterOverrides(results, viewerId);
   return { results, total: data.total_results };
 }
 
@@ -202,6 +256,7 @@ async function fetchSeriesResults(
   q: string,
   limit: number,
   page: number,
+  viewerId: number | null = null,
 ): Promise<{ results: SeriesResult[]; total: number }> {
   const data = await tmdbFetch<TmdbTvSearchResponse>('/search/tv', {
     query: q,
@@ -209,6 +264,8 @@ async function fetchSeriesResults(
   });
   const slice = data.results.slice(0, limit);
   const creators = await Promise.all(slice.map((s) => fetchCreator(s.id)));
+  // Upsert into local cache so user_title_display_prefs JOINs resolve.
+  await Promise.all(slice.map((s) => upsertSeries(s)));
   const results = slice.map((s, i) => ({
     tmdb_id: s.id,
     title: s.name,
@@ -218,6 +275,7 @@ async function fetchSeriesResults(
     creator: creators[i] ?? null,
     media_type: 'series' as const,
   }));
+  await applySeriesPosterOverrides(results, viewerId);
   return { results, total: data.total_results };
 }
 
@@ -343,11 +401,11 @@ async function runTypedSearch(
 ): Promise<{ data: TypedSearchResult[]; total: number; page: number; limit: number }> {
   switch (type) {
     case 'film': {
-      const { results, total } = await fetchFilmResults(q, limit, page);
+      const { results, total } = await fetchFilmResults(q, limit, page, viewerId);
       return { data: results, total, page, limit };
     }
     case 'series': {
-      const { results, total } = await fetchSeriesResults(q, limit, page);
+      const { results, total } = await fetchSeriesResults(q, limit, page, viewerId);
       return { data: results, total, page, limit };
     }
     case 'person': {
@@ -374,11 +432,12 @@ async function runMediaSearch(
   q: string,
   limit: number,
   page: number,
+  viewerId: number | null = null,
 ): Promise<{ data: TypedSearchResult[]; total: number; page: number; limit: number }> {
   const perSource = Math.ceil(limit / 2);
   const [filmsRes, seriesRes] = await Promise.all([
-    fetchFilmResults(q, perSource, page),
-    fetchSeriesResults(q, perSource, page),
+    fetchFilmResults(q, perSource, page, viewerId),
+    fetchSeriesResults(q, perSource, page, viewerId),
   ]);
   // Interleave: film, series, film, series … so neither type dominates the top.
   const interleaved: TypedSearchResult[] = [];
@@ -400,8 +459,8 @@ async function runAllSearch(
   viewerId: number | null = null,
 ): Promise<{ data: AllSearchData }> {
   const [films, series, people, lists, members] = await Promise.all([
-    fetchFilmResults(q, 5, 1),
-    fetchSeriesResults(q, 5, 1),
+    fetchFilmResults(q, 5, 1, viewerId),
+    fetchSeriesResults(q, 5, 1, viewerId),
     fetchPersonResults(q, 5, 1),
     fetchListResults(q, 5, 1),
     fetchMemberResults(q, 5, 1, viewerId),
@@ -450,7 +509,7 @@ export async function search(
     return runAllSearch(q, viewerId);
   }
   if (type === 'media') {
-    return runMediaSearch(q, clampedLimit, page);
+    return runMediaSearch(q, clampedLimit, page, viewerId);
   }
   return runTypedSearch(q, type, clampedLimit, page, viewerId);
 }

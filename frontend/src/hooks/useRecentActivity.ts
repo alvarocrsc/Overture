@@ -17,6 +17,7 @@ interface BackendRatingRow {
   series_tmdb_id: number | null;
   series_title: string | null;
   series_poster: string | null;
+  review_id: number | null;
 }
 
 interface PaginatedResponse {
@@ -42,6 +43,7 @@ function normalise(row: BackendRatingRow): RecentActivityItem | null {
     title,
     poster_path,
     media_type: isFilm ? 'film' : 'series',
+    review_id: row.review_id,
   };
 }
 

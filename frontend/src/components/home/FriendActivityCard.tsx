@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
@@ -19,6 +20,8 @@ interface Props {
   avatarUrl: string | null;
   /** Rating the friend gave (0–5 in 0.5 increments). */
   rating: number;
+  /** Review id, if the friend wrote a review for this log. */
+  reviewId?: number | null;
   onPress?: () => void;
   /** Tap on the small avatar — typically navigates to the friend's profile. */
   onAvatarPress?: () => void;
@@ -35,6 +38,7 @@ export default function FriendActivityCard({
   userId,
   avatarUrl,
   rating,
+  reviewId,
   onPress,
   onAvatarPress,
 }: Props) {
@@ -65,7 +69,17 @@ export default function FriendActivityCard({
           <Text style={styles.username} numberOfLines={1}>
             {username}
           </Text>
-          <StarRating rating={rating} size={9} />
+          <View style={styles.ratingRow}>
+            <StarRating rating={rating} size={9} />
+            {reviewId != null ? (
+              <Ionicons
+                name="reader-outline"
+                size={9}
+                color={Colors.white}
+                style={styles.reviewIcon}
+              />
+            ) : null}
+          </View>
         </View>
       </View>
     </Pressable>
@@ -110,6 +124,14 @@ const styles = StyleSheet.create({
   userInfo: {
     flex: 1,
     gap: 2,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  reviewIcon: {
+    marginTop: 1,
   },
   username: {
     fontFamily: FontFamily.medium,

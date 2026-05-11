@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,8 @@ interface Props {
   item: FilmSearchResult | SeriesSearchResult;
   isLogged?: boolean;
   isInWatchlist?: boolean;
+  /** When true, the log and watchlist action icons are hidden. */
+  hideActions?: boolean;
   onPress: () => void;
   onLogPress: () => void;
   onWatchlistPress: () => void;
@@ -21,11 +23,15 @@ export default function MediaSearchItem({
   item,
   isLogged,
   isInWatchlist,
+  hideActions = false,
   onPress,
   onLogPress,
   onWatchlistPress,
   onRemove,
 }: Props) {
+  const [iconOffset, setIconOffset] = useState<{ x: number; y: number } | null>(null);
+  const ICON_H = 9;
+
   const url = resolveThumbnail(item.posterPath);
   const isSeries = item.type === 'series';
   const subtitleLabel = isSeries ? 'CREATED BY' : 'DIRECTED BY';
@@ -48,11 +54,21 @@ export default function MediaSearchItem({
 
       <View style={styles.textStack}>
         <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text
+            style={[styles.title, isSeries && styles.titleSeries]}
+            numberOfLines={2}
+            onTextLayout={isSeries ? (e) => {
+              const lines = e.nativeEvent.lines;
+              if (!lines.length) return;
+              const last = lines[lines.length - 1];
+              const baseline = last.y + (last.height + last.ascender + last.descender - ICON_H) / 2;
+              setIconOffset({ x: last.x + last.width, y: baseline - ICON_H });
+            } : undefined}
+          >
             {item.title}
           </Text>
-          {isSeries && (
-            <View style={styles.seriesIcon}>
+          {isSeries && iconOffset != null && (
+            <View style={[styles.seriesIcon, { left: iconOffset.x + 5, top: iconOffset.y }]}>
               <SeriesIcon size={10} color={Colors.accentBlue} />
             </View>
           )}
@@ -68,39 +84,41 @@ export default function MediaSearchItem({
         ) : null}
       </View>
 
-      <View style={styles.actions}>
-        <Pressable
-          onPress={onLogPress}
-          hitSlop={8}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Ionicons
-            name={isLogged ? 'checkmark-circle' : 'add-circle-outline'}
-            size={20}
-            color={Colors.white}
-          />
-        </Pressable>
-        <Pressable
-          onPress={onWatchlistPress}
-          hitSlop={8}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Ionicons
-            name={isInWatchlist ? 'bookmark' : 'bookmark-outline'}
-            size={18}
-            color={Colors.white}
-          />
-        </Pressable>
-        {onRemove && (
+      {!hideActions && (
+        <View style={styles.actions}>
           <Pressable
-            onPress={onRemove}
+            onPress={onLogPress}
             hitSlop={8}
             style={({ pressed }) => pressed && styles.pressed}
           >
-            <Ionicons name="close" size={16} color={Colors.white} />
+            <Ionicons
+              name={isLogged ? 'checkmark-circle' : 'add-circle-outline'}
+              size={20}
+              color={Colors.white}
+            />
           </Pressable>
-        )}
-      </View>
+          <Pressable
+            onPress={onWatchlistPress}
+            hitSlop={8}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Ionicons
+              name={isInWatchlist ? 'bookmark' : 'bookmark-outline'}
+              size={18}
+              color={Colors.white}
+            />
+          </Pressable>
+          {onRemove && (
+            <Pressable
+              onPress={onRemove}
+              hitSlop={8}
+              style={({ pressed }) => pressed && styles.pressed}
+            >
+              <Ionicons name="close" size={16} color={Colors.white} />
+            </Pressable>
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -156,9 +174,12 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     flexShrink: 1,
   },
+  titleSeries: {
+    // reserves room for the icon so it never overflows the container
+    paddingRight: 18,
+  },
   seriesIcon: {
-    marginLeft: 6,
-    marginTop: 5,
+    position: 'absolute',
   },
   meta: {
     fontFamily: FontFamily.light,

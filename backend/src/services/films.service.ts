@@ -1,9 +1,8 @@
-import { query, execute } from '../config/db';
+import { query, queryMany, execute } from '../config/db';
 import * as tmdbService from './tmdb.service';
 import { tmdbFetch } from '../config/tmdb';
 import { AppError } from '../utils/app-error';
 import type { Film } from '../models/film.model';
-import type { FilmCredit } from '../models/film-credit.model';
 import type { TmdbMovie, TmdbImage, TmdbVideo, TmdbCreditsResult } from '../types/tmdb.types';
 
 /** A film row projected for search/discovery responses. */
@@ -61,6 +60,19 @@ export interface FilmCreditsResponse {
     profile_path: string | null;
     popularity: number | null;
   }>;
+  /**
+   * Full crew list, sorted by department importance and popularity. Each
+   * entry preserves the TMDB job string so the UI can group / label rows
+   * (e.g. Writer, Editor, Producer, Visual Effects Supervisor…).
+   */
+  crew: Array<{
+    person_tmdb_id: number;
+    person_name: string;
+    job: string;
+    department: string;
+    profile_path: string | null;
+    popularity: number | null;
+  }>;
 }
 
 /**
@@ -69,16 +81,24 @@ export interface FilmCreditsResponse {
  * value is null (list endpoints don't return runtime).
  * @param film - The TMDB movie object to cache.
  */
-async function upsertFilm(film: TmdbMovie): Promise<void> {
+export async function upsertFilm(film: TmdbMovie): Promise<void> {
+  // List endpoints (TmdbMovie) don't include tagline; only detail responses do.
+  // Use a runtime check so cached taglines aren't overwritten by NULL when a
+  // film flows through trending/search before its detail is hydrated.
+  const tagline =
+    'tagline' in film && typeof (film as { tagline?: unknown }).tagline === 'string'
+      ? ((film as { tagline: string }).tagline || null)
+      : null;
   await execute(
     `INSERT INTO films
-       (tmdb_id, title, original_title, overview, poster_path, backdrop_path,
+       (tmdb_id, title, original_title, overview, tagline, poster_path, backdrop_path,
         release_date, runtime_min, original_language, tmdb_rating, tmdb_popularity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        title            = VALUES(title),
        original_title   = VALUES(original_title),
        overview         = VALUES(overview),
+       tagline          = COALESCE(VALUES(tagline), tagline),
        poster_path      = VALUES(poster_path),
        backdrop_path    = VALUES(backdrop_path),
        release_date     = VALUES(release_date),
@@ -92,6 +112,7 @@ async function upsertFilm(film: TmdbMovie): Promise<void> {
       film.title,
       film.original_title ?? null,
       film.overview ?? null,
+      tagline,
       film.poster_path ?? null,
       film.backdrop_path ?? null,
       film.release_date || null,
@@ -122,9 +143,55 @@ async function loadGenresForFilm(
   return rows.map((r) => ({ id: r.id!, name: r.name }));
 }
 
+/**
+ * Overlays the authenticated user's saved custom poster / backdrop overrides
+ * onto a list of TmdbMovie results, keyed by TMDB id. Mutates and returns a
+ * new array — does not mutate the inputs. No-ops when userId is null or the
+ * list is empty.
+ * @param films - The TMDB movies to enrich.
+ * @param userId - Authenticated user ID, or null.
+ * @returns A new array of films with poster_path / backdrop_path overridden
+ *          where the user has saved a custom selection.
+ */
+export async function applyFilmDisplayPrefs<T extends TmdbMovie>(
+  films: T[],
+  userId: number | null,
+): Promise<T[]> {
+  if (userId === null || films.length === 0) return films;
+  const tmdbIds = films.map((f) => f.id);
+  const rows = await queryMany<{
+    tmdb_id: number;
+    custom_poster_path: string | null;
+    custom_backdrop_path: string | null;
+  }>(
+    `SELECT f.tmdb_id, p.custom_poster_path, p.custom_backdrop_path
+     FROM user_title_display_prefs p
+     JOIN films f ON f.id = p.film_id
+     WHERE p.user_id = ? AND f.tmdb_id IN (?)`,
+    [userId, tmdbIds],
+  );
+  if (rows.length === 0) return films;
+  const map = new Map(rows.map((r) => [r.tmdb_id, r]));
+  return films.map((f) => {
+    const override = map.get(f.id);
+    if (!override) return f;
+    return {
+      ...f,
+      poster_path: override.custom_poster_path ?? f.poster_path,
+      backdrop_path: override.custom_backdrop_path ?? f.backdrop_path,
+    };
+  });
+}
+
 /** Maps a raw TmdbMovie to the slim FilmSearchResult shape. */
-function toSearchResult(film: TmdbMovie): FilmSearchResult {
-  return { tmdb_id: film.id, title: film.title, poster_path: film.poster_path };
+function toSearchResult(film: TmdbMovie, director: string | null = null): FilmSearchResult {
+  return {
+    tmdb_id: film.id,
+    title: film.title,
+    poster_path: film.poster_path,
+    release_date: film.release_date || null,
+    director,
+  };
 }
 
 /**
@@ -160,14 +227,18 @@ async function resolveDirector(tmdbId: number): Promise<string | null> {
  * @param page - The page number to fetch (1-indexed).
  * @returns A PaginatedFilmsResult.
  */
-export async function getTrendingFilms(page: number): Promise<PaginatedFilmsResult> {
+export async function getTrendingFilms(
+  page: number,
+  userId: number | null = null,
+): Promise<PaginatedFilmsResult> {
   const { results, total_pages } = await tmdbService.getTrendingFilms(page);
   for (const film of results) {
     await upsertFilm(film);
   }
-  const directors = await Promise.all(results.map((f) => resolveDirector(f.id)));
+  const overridden = await applyFilmDisplayPrefs(results, userId);
+  const directors = await Promise.all(overridden.map((f) => resolveDirector(f.id)));
   return {
-    data: results.map((film, i) => toTrendingResult(film, directors[i] ?? null)),
+    data: overridden.map((film, i) => toTrendingResult(film, directors[i] ?? null)),
     page,
     total_pages,
   };
@@ -179,12 +250,17 @@ export async function getTrendingFilms(page: number): Promise<PaginatedFilmsResu
  * @param page - The page number to fetch (1-indexed).
  * @returns A PaginatedFilmsResult.
  */
-export async function getTopRatedFilms(page: number): Promise<PaginatedFilmsResult> {
+export async function getTopRatedFilms(
+  page: number,
+  userId: number | null = null,
+): Promise<PaginatedFilmsResult> {
   const { results, total_pages } = await tmdbService.getTopRatedFilms(page);
   for (const film of results) {
     await upsertFilm(film);
   }
-  return { data: results.map(toSearchResult), page, total_pages };
+  const overridden = await applyFilmDisplayPrefs(results, userId);
+  const directors = await Promise.all(overridden.map((f) => resolveDirector(f.id)));
+  return { data: overridden.map((film, i) => toSearchResult(film, directors[i] ?? null)), page, total_pages };
 }
 
 /**
@@ -192,12 +268,12 @@ export async function getTopRatedFilms(page: number): Promise<PaginatedFilmsResu
  * and returns the TMDB response directly.
  * @returns An array of TmdbMovie objects.
  */
-export async function getNewReleases(): Promise<TmdbMovie[]> {
+export async function getNewReleases(userId: number | null = null): Promise<TmdbMovie[]> {
   const films = await tmdbService.getNewReleases();
   for (const film of films) {
     await upsertFilm(film);
   }
-  return films;
+  return applyFilmDisplayPrefs(films, userId);
 }
 
 /**
@@ -210,12 +286,15 @@ export async function getNewReleases(): Promise<TmdbMovie[]> {
 export async function searchFilms(
   searchQuery: string,
   page: number,
+  userId: number | null = null,
 ): Promise<PaginatedFilmsResult> {
   const { results, total_pages } = await tmdbService.searchFilms(searchQuery, page);
   for (const film of results) {
     await upsertFilm(film);
   }
-  return { data: results.map(toSearchResult), page, total_pages };
+  const overridden = await applyFilmDisplayPrefs(results, userId);
+  const directors = await Promise.all(overridden.map((f) => resolveDirector(f.id)));
+  return { data: overridden.map((film, i) => toSearchResult(film, directors[i] ?? null)), page, total_pages };
 }
 
 /**
@@ -227,7 +306,7 @@ export async function searchFilms(
  */
 export async function getFilmById(tmdbId: number): Promise<FilmWithGenres> {
   const [cached] = await query<Film>(
-    `SELECT id, tmdb_id, title, original_title, overview, poster_path,
+    `SELECT id, tmdb_id, title, original_title, overview, tagline, poster_path,
             backdrop_path, release_date, runtime_min, original_language,
             tmdb_rating, tmdb_popularity, cached_at
      FROM films
@@ -324,6 +403,7 @@ export async function getFilmById(tmdbId: number): Promise<FilmWithGenres> {
     title: detail.title,
     original_title: detail.original_title,
     overview: detail.overview,
+    tagline: detail.tagline || null,
     poster_path: detail.poster_path,
     backdrop_path: detail.backdrop_path,
     release_date: detail.release_date || null,
@@ -365,47 +445,19 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
     [tmdbId],
   );
 
-  if (film) {
-    const localCredits = await query<FilmCredit>(
-      `SELECT id, film_id, person_tmdb_id, person_name, role, character_name,
-              profile_path, popularity, cast_order
-       FROM film_credits WHERE film_id = ?`,
-      [film.id],
-    );
-
-    if (localCredits.length > 0) {
-      return {
-        directors: localCredits
-          .filter((c) => c.role === 'director')
-          .map((c) => ({
-            person_tmdb_id: c.person_tmdb_id,
-            person_name: c.person_name,
-            profile_path: c.profile_path,
-            popularity: c.popularity,
-          })),
-        cast: localCredits
-          .filter((c) => c.role === 'actor')
-          .map((c) => ({
-            person_tmdb_id: c.person_tmdb_id,
-            person_name: c.person_name,
-            character_name: c.character_name,
-            cast_order: c.cast_order,
-            profile_path: c.profile_path,
-            popularity: c.popularity,
-          })),
-      };
-    }
-  }
-
-  // No local cache — fetch from TMDB.
+  // Always fetch fresh from TMDB so the full crew (writers, editors, VFX,
+  // sound, production, …) is available — the local film_credits cache only
+  // stores directors and actors today and would drop the rest.
   const credits = await tmdbService.getFilmCredits(tmdbId);
-  const directors = credits.crew.filter((m) => m.job === 'Director');
+  const directorsTmdb = credits.crew.filter((m) => m.job === 'Director');
   const cast = credits.cast;
 
   if (film) {
+    // Refresh the cache of director/actor rows so listings that read this
+    // table (carousels, profile) stay up to date.
     await execute(`DELETE FROM film_credits WHERE film_id = ?`, [film.id]);
 
-    for (const director of directors) {
+    for (const director of directorsTmdb) {
       await execute(
         `INSERT INTO film_credits
            (film_id, person_tmdb_id, person_name, role, profile_path, popularity)
@@ -433,8 +485,32 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
     }
   }
 
+  // Sort the crew so headline jobs (Director, Writer, Producer, …) bubble
+  // up; within a department we order by popularity so the most recognisable
+  // collaborator appears first.
+  const departmentRank: Record<string, number> = {
+    Directing: 0,
+    Writing: 1,
+    Production: 2,
+    Editing: 3,
+    Camera: 4,
+    Sound: 5,
+    Art: 6,
+    'Visual Effects': 7,
+    'Costume & Make-Up': 8,
+    Lighting: 9,
+    Crew: 10,
+    Actors: 99,
+  };
+  const sortedCrew = [...credits.crew].sort((a, b) => {
+    const ra = departmentRank[a.department] ?? 50;
+    const rb = departmentRank[b.department] ?? 50;
+    if (ra !== rb) return ra - rb;
+    return (b.popularity ?? 0) - (a.popularity ?? 0);
+  });
+
   return {
-    directors: directors.map((m) => ({
+    directors: directorsTmdb.map((m) => ({
       person_tmdb_id: m.id,
       person_name: m.name,
       profile_path: m.profile_path,
@@ -445,6 +521,14 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
       person_name: m.name,
       character_name: m.character,
       cast_order: m.order,
+      profile_path: m.profile_path,
+      popularity: m.popularity,
+    })),
+    crew: sortedCrew.map((m) => ({
+      person_tmdb_id: m.id,
+      person_name: m.name,
+      job: m.job,
+      department: m.department,
       profile_path: m.profile_path,
       popularity: m.popularity,
     })),
@@ -464,5 +548,536 @@ export async function getFilmTrailer(tmdbId: number): Promise<TmdbVideo | null> 
     videos.find(
       (v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official,
     ) ?? null
+  );
+}
+
+// ─── Detail enrichment ───────────────────────────────────────────────────────
+
+/** Per-user enrichment fields layered on top of the base film cache. */
+export interface FilmUserContext {
+  is_logged: boolean;
+  is_in_watchlist: boolean;
+  /** ID of the watchlist row when is_in_watchlist is true, else null. */
+  watchlist_id: number | null;
+  is_liked: boolean;
+  user_rating: number | null;
+  user_log_count: number;
+}
+
+/** Custom display paths the authenticated user has saved for this title. */
+export interface FilmDisplayPrefs {
+  custom_poster_path: string | null;
+  custom_backdrop_path: string | null;
+}
+
+/** Full film detail returned by GET /films/:tmdbId. */
+export interface FilmDetailResponse extends FilmWithGenres {
+  /** Director name resolved from cached film_credits. May be null when unknown. */
+  director: string | null;
+  /** Custom poster path saved by the authenticated user. Null when anonymous or unset. */
+  custom_poster_path: string | null;
+  /** Custom backdrop path saved by the authenticated user. Null when anonymous or unset. */
+  custom_backdrop_path: string | null;
+  is_logged: boolean;
+  is_in_watchlist: boolean;
+  /** ID of the watchlist row when is_in_watchlist is true, else null. */
+  watchlist_id: number | null;
+  is_liked: boolean;
+  user_rating: number | null;
+  user_log_count: number;
+}
+
+/**
+ * Loads per-user context (logged/liked/watchlisted/rating) for a film.
+ * Returns zeroed defaults when userId is null (anonymous request).
+ * @param filmId - Internal films.id.
+ * @param userId - Authenticated user ID, or null.
+ * @returns A FilmUserContext object.
+ */
+async function loadFilmUserContext(
+  filmId: number,
+  userId: number | null,
+): Promise<FilmUserContext> {
+  if (userId === null) {
+    return {
+      is_logged: false,
+      is_in_watchlist: false,
+      watchlist_id: null,
+      is_liked: false,
+      user_rating: null,
+      user_log_count: 0,
+    };
+  }
+
+  const [ratingAgg] = await query<{
+    log_count: number;
+    latest_value: number | null;
+  }>(
+    `SELECT COUNT(*) AS log_count,
+            (SELECT value FROM ratings
+             WHERE user_id = ? AND film_id = ?
+             ORDER BY created_at DESC LIMIT 1) AS latest_value
+     FROM ratings
+     WHERE user_id = ? AND film_id = ?`,
+    [userId, filmId, userId, filmId],
+  );
+
+  const [watchlistRow] = await query<{ watchlist_id: number }>(
+    `SELECT w.id AS watchlist_id
+     FROM watchlist w
+     WHERE w.user_id = ? AND w.film_id = ?
+     LIMIT 1`,
+    [userId, filmId],
+  );
+
+  const [likeRow] = await query<{ id: number }>(
+    `SELECT id FROM title_likes WHERE user_id = ? AND film_id = ? LIMIT 1`,
+    [userId, filmId],
+  );
+
+  const logCount = Number(ratingAgg?.log_count ?? 0);
+  const latestValue =
+    ratingAgg?.latest_value !== null && ratingAgg?.latest_value !== undefined
+      ? Number(ratingAgg.latest_value)
+      : null;
+
+  return {
+    is_logged: logCount > 0,
+    is_in_watchlist: Boolean(watchlistRow),
+    watchlist_id: watchlistRow?.watchlist_id ?? null,
+    is_liked: Boolean(likeRow),
+    user_rating: latestValue,
+    user_log_count: logCount,
+  };
+}
+
+/**
+ * Loads the authenticated user's saved display prefs for a film.
+ * Returns nulls when no prefs have been saved or when userId is null.
+ * @param filmId - Internal films.id.
+ * @param userId - Authenticated user ID, or null.
+ * @returns A FilmDisplayPrefs object.
+ */
+async function loadFilmDisplayPrefs(
+  filmId: number,
+  userId: number | null,
+): Promise<FilmDisplayPrefs> {
+  if (userId === null) {
+    return { custom_poster_path: null, custom_backdrop_path: null };
+  }
+  const [row] = await query<FilmDisplayPrefs>(
+    `SELECT custom_poster_path, custom_backdrop_path
+     FROM user_title_display_prefs
+     WHERE user_id = ? AND film_id = ?
+     LIMIT 1`,
+    [userId, filmId],
+  );
+  return {
+    custom_poster_path: row?.custom_poster_path ?? null,
+    custom_backdrop_path: row?.custom_backdrop_path ?? null,
+  };
+}
+
+/**
+ * Loads the (first) director name for a film from the cached film_credits.
+ * @param filmId - Internal films.id.
+ * @returns The director name, or null when no director is cached.
+ */
+async function loadFilmDirector(filmId: number): Promise<string | null> {
+  const [row] = await query<{ person_name: string }>(
+    `SELECT person_name FROM film_credits
+     WHERE film_id = ? AND role = 'director'
+     ORDER BY popularity DESC, id ASC LIMIT 1`,
+    [filmId],
+  );
+  return row?.person_name ?? null;
+}
+
+/**
+ * Returns full film detail enriched with per-user context, display prefs,
+ * and the director name. Calls getFilmById internally to ensure the local
+ * cache (and film_credits) is hydrated.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID, or null for anonymous requests.
+ * @returns A FilmDetailResponse.
+ */
+export async function getFilmDetail(
+  tmdbId: number,
+  userId: number | null,
+): Promise<FilmDetailResponse> {
+  const base = await getFilmById(tmdbId);
+  const [userCtx, displayPrefs, director] = await Promise.all([
+    loadFilmUserContext(base.id, userId),
+    loadFilmDisplayPrefs(base.id, userId),
+    loadFilmDirector(base.id),
+  ]);
+  return {
+    ...base,
+    director,
+    custom_poster_path: displayPrefs.custom_poster_path,
+    custom_backdrop_path: displayPrefs.custom_backdrop_path,
+    ...userCtx,
+  };
+}
+
+// ─── Rating distribution ─────────────────────────────────────────────────────
+
+/** A single bin in the app-wide rating distribution. */
+export interface FilmDistributionBin {
+  value: number;
+  count: number;
+}
+
+/** Response shape for GET /films/:tmdbId/distribution. */
+export interface FilmDistributionResponse {
+  distribution: FilmDistributionBin[];
+  /** App-wide average rating, excluding rewatches. Null when no ratings exist. */
+  average: number | null;
+}
+
+/**
+ * Returns the app-wide rating distribution for a film, plus the average.
+ * Excludes rewatches so each user contributes at most one rating per bin.
+ * @param tmdbId - The TMDB movie ID.
+ * @returns A FilmDistributionResponse with bins and average.
+ */
+export async function getFilmRatingDistribution(
+  tmdbId: number,
+): Promise<FilmDistributionResponse> {
+  const [film] = await query<{ id: number }>(
+    `SELECT id FROM films WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!film) {
+    return { distribution: [], average: null };
+  }
+
+  const [rows, [avgRow]] = await Promise.all([
+    query<{ value: number | string; count: number | string }>(
+      `SELECT value, COUNT(*) AS count
+       FROM ratings
+       WHERE film_id = ? AND is_rewatch = 0
+       GROUP BY value
+       ORDER BY value ASC`,
+      [film.id],
+    ),
+    query<{ avg: number | string | null }>(
+      `SELECT AVG(value) AS avg FROM ratings
+       WHERE film_id = ? AND is_rewatch = 0`,
+      [film.id],
+    ),
+  ]);
+
+  return {
+    distribution: rows.map((r) => ({
+      value: Number(r.value),
+      count: Number(r.count),
+    })),
+    average: avgRow?.avg !== null && avgRow?.avg !== undefined
+      ? Number(avgRow.avg)
+      : null,
+  };
+}
+
+// ─── Watched by / Want to watch ──────────────────────────────────────────────
+
+/** A single entry in the "watched by" list. */
+export interface FilmWatchedByRow {
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+  rating: number | null;
+  is_rewatch: boolean;
+  has_review: boolean;
+  review_id: number | null;
+}
+
+/** A single entry in the "want to watch" list. */
+export interface FilmWatchlistedByRow {
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+}
+
+const SOCIAL_LIMIT = 20;
+
+/**
+ * Returns up to 20 users who have logged this film. When userId is provided,
+ * users that the requester follows appear first.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID, or null for anonymous requests.
+ * @returns An array of FilmWatchedByRow.
+ */
+export async function getFilmWatchedBy(
+  tmdbId: number,
+  userId: number | null,
+): Promise<FilmWatchedByRow[]> {
+  const [film] = await query<{ id: number }>(
+    `SELECT id FROM films WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!film) return [];
+
+  // is_friend = 1 when the row belongs to a user the requester follows.
+  // The latest rating per user wins (ORDER BY created_at DESC, deduped via MAX).
+  const rows = await query<{
+    user_id: number;
+    username: string;
+    avatar_url: string | null;
+    rating: number | string;
+    is_rewatch: number;
+    has_review: number;
+    review_id: number | null;
+    is_friend: number;
+  }>(
+    `SELECT
+       u.id AS user_id,
+       u.username,
+       u.avatar_url,
+       r.value AS rating,
+       r.is_rewatch,
+       (CASE WHEN rv.id IS NOT NULL THEN 1 ELSE 0 END) AS has_review,
+       rv.id AS review_id,
+       (CASE WHEN ? IS NOT NULL AND f.follower_id IS NOT NULL THEN 1 ELSE 0 END) AS is_friend
+     FROM ratings r
+     JOIN users u ON u.id = r.user_id
+     LEFT JOIN reviews rv ON rv.rating_id = r.id
+     LEFT JOIN follows f ON f.follower_id = ? AND f.following_id = u.id
+     WHERE r.film_id = ?
+       AND (? IS NULL OR u.id != ?)
+     GROUP BY u.id, u.username, u.avatar_url, r.value, r.is_rewatch, r.created_at, rv.id, f.follower_id
+     ORDER BY is_friend DESC, r.created_at DESC
+     LIMIT ${SOCIAL_LIMIT}`,
+    [userId, userId, film.id, userId, userId],
+  );
+
+  return rows.map((r) => ({
+    user_id: r.user_id,
+    username: r.username,
+    avatar_url: r.avatar_url,
+    rating: Number(r.rating),
+    is_rewatch: Boolean(r.is_rewatch),
+    has_review: Boolean(r.has_review),
+    review_id: r.review_id,
+  }));
+}
+
+/**
+ * Returns up to 20 users who have this film in their watchlist. When userId
+ * is provided, users that the requester follows appear first.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID, or null for anonymous requests.
+ * @returns An array of FilmWatchlistedByRow.
+ */
+export async function getFilmWatchlistedBy(
+  tmdbId: number,
+  userId: number | null,
+): Promise<FilmWatchlistedByRow[]> {
+  const [film] = await query<{ id: number }>(
+    `SELECT id FROM films WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!film) return [];
+
+  const rows = await query<{
+    user_id: number;
+    username: string;
+    avatar_url: string | null;
+    is_friend: number;
+  }>(
+    `SELECT
+       u.id AS user_id,
+       u.username,
+       u.avatar_url,
+       (CASE WHEN ? IS NOT NULL AND f.follower_id IS NOT NULL THEN 1 ELSE 0 END) AS is_friend
+     FROM watchlist w
+     JOIN users u ON u.id = w.user_id
+     LEFT JOIN follows f ON f.follower_id = ? AND f.following_id = u.id
+     WHERE w.film_id = ?
+       AND (? IS NULL OR u.id != ?)
+     ORDER BY is_friend DESC, w.added_at DESC
+     LIMIT ${SOCIAL_LIMIT}`,
+    [userId, userId, film.id, userId, userId],
+  );
+
+  return rows.map((r) => ({
+    user_id: r.user_id,
+    username: r.username,
+    avatar_url: r.avatar_url,
+  }));
+}
+
+// ─── My logs ─────────────────────────────────────────────────────────────────
+
+/** A single rating row in the authenticated user's log history for a film. */
+export interface FilmMyLogRow {
+  id: number;
+  value: number;
+  watched_on: string | null;
+  is_rewatch: boolean;
+  review_id: number | null;
+  created_at: Date;
+}
+
+/**
+ * Returns all of the authenticated user's ratings for a film, including
+ * rewatches, ordered by created_at DESC.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID.
+ * @returns An array of FilmMyLogRow.
+ */
+export async function getFilmMyLogs(
+  tmdbId: number,
+  userId: number,
+): Promise<FilmMyLogRow[]> {
+  const [film] = await query<{ id: number }>(
+    `SELECT id FROM films WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!film) return [];
+
+  const rows = await query<{
+    id: number;
+    value: number | string;
+    watched_on: string | null;
+    is_rewatch: number;
+    review_id: number | null;
+    created_at: Date;
+  }>(
+    `SELECT r.id, r.value, r.watched_on, r.is_rewatch, rv.id AS review_id, r.created_at
+     FROM ratings r
+     LEFT JOIN reviews rv ON rv.rating_id = r.id
+     WHERE r.user_id = ? AND r.film_id = ?
+     ORDER BY r.created_at DESC`,
+    [userId, film.id],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    value: Number(r.value),
+    watched_on: r.watched_on,
+    is_rewatch: Boolean(r.is_rewatch),
+    review_id: r.review_id,
+    created_at: r.created_at,
+  }));
+}
+
+// ─── Display prefs ───────────────────────────────────────────────────────────
+
+/**
+ * Returns the authenticated user's saved display prefs for a film, or null
+ * when none have been saved.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID.
+ * @returns A FilmDisplayPrefs object, or null when no row exists.
+ */
+export async function getFilmDisplayPrefs(
+  tmdbId: number,
+  userId: number,
+): Promise<FilmDisplayPrefs | null> {
+  const [film] = await query<{ id: number }>(
+    `SELECT id FROM films WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!film) return null;
+  const [row] = await query<FilmDisplayPrefs>(
+    `SELECT custom_poster_path, custom_backdrop_path
+     FROM user_title_display_prefs
+     WHERE user_id = ? AND film_id = ? LIMIT 1`,
+    [userId, film.id],
+  );
+  return row
+    ? {
+        custom_poster_path: row.custom_poster_path ?? null,
+        custom_backdrop_path: row.custom_backdrop_path ?? null,
+      }
+    : null;
+}
+
+/**
+ * Upserts the authenticated user's display prefs for a film. Either path may
+ * be omitted (undefined) to leave the existing value untouched, or set to null
+ * to clear it.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID.
+ * @param posterPath - New custom poster path, null to clear, undefined to leave alone.
+ * @param backdropPath - New custom backdrop path, null to clear, undefined to leave alone.
+ * @returns The saved FilmDisplayPrefs.
+ */
+export async function setFilmDisplayPrefs(
+  tmdbId: number,
+  userId: number,
+  posterPath: string | null | undefined,
+  backdropPath: string | null | undefined,
+): Promise<FilmDisplayPrefs> {
+  // getFilmById ensures the film row exists locally before we reference it.
+  const base = await getFilmById(tmdbId);
+  const filmId = base.id;
+
+  // Read existing row so undefined params preserve current values.
+  const [existing] = await query<FilmDisplayPrefs>(
+    `SELECT custom_poster_path, custom_backdrop_path
+     FROM user_title_display_prefs
+     WHERE user_id = ? AND film_id = ? LIMIT 1`,
+    [userId, filmId],
+  );
+
+  const nextPoster =
+    posterPath === undefined
+      ? existing?.custom_poster_path ?? null
+      : posterPath;
+  const nextBackdrop =
+    backdropPath === undefined
+      ? existing?.custom_backdrop_path ?? null
+      : backdropPath;
+
+  await execute(
+    `INSERT INTO user_title_display_prefs
+       (user_id, film_id, custom_poster_path, custom_backdrop_path)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       custom_poster_path   = VALUES(custom_poster_path),
+       custom_backdrop_path = VALUES(custom_backdrop_path)`,
+    [userId, filmId, nextPoster, nextBackdrop],
+  );
+
+  return {
+    custom_poster_path: nextPoster,
+    custom_backdrop_path: nextBackdrop,
+  };
+}
+
+// ─── Likes ───────────────────────────────────────────────────────────────────
+
+/**
+ * Hearts a film for the authenticated user. Idempotent — re-liking a film
+ * silently succeeds. Throws 404 if the film does not exist (after the local
+ * cache hydration handled by getFilmById).
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID.
+ */
+export async function likeFilm(tmdbId: number, userId: number): Promise<void> {
+  const base = await getFilmById(tmdbId);
+  await execute(
+    `INSERT IGNORE INTO title_likes (user_id, film_id) VALUES (?, ?)`,
+    [userId, base.id],
+  );
+}
+
+/**
+ * Removes a heart on a film for the authenticated user. Idempotent — a
+ * missing row is treated as success.
+ * @param tmdbId - The TMDB movie ID.
+ * @param userId - Authenticated user ID.
+ */
+export async function unlikeFilm(tmdbId: number, userId: number): Promise<void> {
+  const [film] = await query<{ id: number }>(
+    `SELECT id FROM films WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!film) return;
+  await execute(
+    `DELETE FROM title_likes WHERE user_id = ? AND film_id = ?`,
+    [userId, film.id],
   );
 }

@@ -33,8 +33,9 @@ export interface RatingListRow {
 
 /** Result returned after creating a rating. */
 export interface CreateRatingResult {
-  ratingId: number;
-  reviewId: number | null;
+  rating_id: number;
+  review_id: number | null;
+  is_rewatch: boolean;
 }
 
 /**
@@ -165,9 +166,23 @@ export async function createRating(
         [userId, internalFilmId, internalSeriesId],
       );
     }
+
+    // Persist any TMDB backdrops attached to the review as review_media rows.
+    const paths = data.review.backdrop_paths ?? [];
+    for (let i = 0; i < paths.length; i++) {
+      const path = paths[i]!;
+      const url = `https://image.tmdb.org/t/p/w1280${path}`;
+      const previewUrl = `https://image.tmdb.org/t/p/w780${path}`;
+      await execute(
+        `INSERT INTO review_media
+           (review_id, media_type, source, source_id, url, preview_url, position)
+         VALUES (?, 'image', 'tmdb', ?, ?, ?, ?)`,
+        [reviewId, path, url, previewUrl, i],
+      );
+    }
   }
 
-  return { ratingId, reviewId };
+  return { rating_id: ratingId, review_id: reviewId, is_rewatch: data.is_rewatch };
 }
 
 /**
@@ -359,10 +374,10 @@ export async function getRatingsByUser(
        r.created_at,
        f.tmdb_id  AS film_tmdb_id,
        f.title    AS film_title,
-       f.poster_path AS film_poster,
+       COALESCE(pf.custom_poster_path, f.poster_path) AS film_poster,
        s.tmdb_id  AS series_tmdb_id,
        s.title    AS series_title,
-       s.poster_path AS series_poster,
+       COALESCE(ps.custom_poster_path, s.poster_path) AS series_poster,
        rev.id     AS review_id,
        rev.body   AS review_body,
        rev.contains_spoilers,
@@ -371,6 +386,10 @@ export async function getRatingsByUser(
      LEFT JOIN films   f   ON r.film_id   = f.id
      LEFT JOIN series  s   ON r.series_id = s.id
      LEFT JOIN reviews rev ON rev.rating_id = r.id
+     LEFT JOIN user_title_display_prefs pf
+       ON pf.user_id = r.user_id AND pf.film_id   = f.id
+     LEFT JOIN user_title_display_prefs ps
+       ON ps.user_id = r.user_id AND ps.series_id = s.id
      ${baseWhere}
      ORDER BY r.watched_on DESC, r.created_at DESC
      LIMIT ${clampedLimit} OFFSET ${offset}`,

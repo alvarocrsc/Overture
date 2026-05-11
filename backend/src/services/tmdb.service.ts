@@ -4,6 +4,7 @@ import type {
   TmdbMovieDetail,
   TmdbImageResult,
   TmdbCreditsResult,
+  TmdbAggregateCreditsResult,
   TmdbSeries,
   TmdbSeriesDetail,
   TmdbVideo,
@@ -171,4 +172,18 @@ export async function getSeriesImages(tmdbId: number): Promise<TmdbImageResult> 
  */
 export async function getSeriesCredits(tmdbId: number): Promise<TmdbCreditsResult> {
   return tmdbFetch<TmdbCreditsResult>(`/tv/${tmdbId}/credits`);
+}
+
+/**
+ * Fetches season-aggregated cast and crew for a TV series. This is the
+ * authoritative source for "everyone who appeared in the show" — the regular
+ * /tv/{id}/credits endpoint frequently returns an empty or truncated cast for
+ * shows whose most recent season has no main cast block populated.
+ * @param tmdbId - The TMDB series ID.
+ * @returns A TmdbAggregateCreditsResult containing aggregated cast and crew.
+ */
+export async function getSeriesAggregateCredits(
+  tmdbId: number,
+): Promise<TmdbAggregateCreditsResult> {
+  return tmdbFetch<TmdbAggregateCreditsResult>(`/tv/${tmdbId}/aggregate_credits`);
 }

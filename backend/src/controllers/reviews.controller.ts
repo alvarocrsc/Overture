@@ -85,18 +85,10 @@ export async function unlikeReview(req: Request, res: Response): Promise<void> {
 /** GET /api/v1/reviews/:id/comments */
 export async function getReviewComments(req: Request, res: Response): Promise<void> {
   const reviewId = parseId(String(req.params['id']), 'review ID');
-
-  let parentId: number | null = null;
-  const rawParent = req.query['parent_id'];
-  if (rawParent !== undefined) {
-    parentId = Number(rawParent);
-    if (isNaN(parentId)) {
-      throw new AppError('Invalid parent_id', 400);
-    }
-  }
-
-  const result = await reviewsService.getReviewComments(reviewId, { parentId });
-  res.status(200).json(result);
+  // Public route; decode the bearer token (if any) so we can populate is_liked.
+  const requestingUserId = req.user?.userId ?? tryDecodeUserId(req);
+  const data = await reviewsService.getReviewComments(reviewId, { requestingUserId });
+  res.status(200).json({ data });
 }
 
 /** POST /api/v1/reviews/:id/comments */
@@ -106,4 +98,20 @@ export async function createReviewComment(req: Request, res: Response): Promise<
   const userId = req.user!.userId;
   const result = await reviewsService.createReviewComment(reviewId, userId, data);
   res.status(201).json({ data: result, message: 'Comment added' });
+}
+
+/** POST /api/v1/reviews/:id/comments/:commentId/like */
+export async function likeComment(req: Request, res: Response): Promise<void> {
+  const commentId = parseId(String(req.params['commentId']), 'comment ID');
+  const userId = req.user!.userId;
+  await reviewsService.likeComment(commentId, userId);
+  res.status(200).json({ message: 'Comment liked' });
+}
+
+/** DELETE /api/v1/reviews/:id/comments/:commentId/like */
+export async function unlikeComment(req: Request, res: Response): Promise<void> {
+  const commentId = parseId(String(req.params['commentId']), 'comment ID');
+  const userId = req.user!.userId;
+  await reviewsService.unlikeComment(commentId, userId);
+  res.status(200).json({ message: 'Comment unliked' });
 }

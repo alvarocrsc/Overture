@@ -10,9 +10,12 @@ import {
   getMyFavorites,
   updateMyFavorites,
   getUserFavoritesById,
+  getMyFriendsActivity,
+  uploadAvatar,
 } from '../controllers/users.controller';
 import { verifyAccessToken, optionalAccessToken } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { upload } from '../middleware/upload';
 import {
   updateMeSchema,
   updateFavoritesSchema,
@@ -22,6 +25,12 @@ const router = Router();
 
 router.get('/me', verifyAccessToken, getMe);
 router.put('/me', verifyAccessToken, validate(updateMeSchema), updateMe);
+router.post(
+  '/me/avatar',
+  verifyAccessToken,
+  upload.single('avatar'),
+  uploadAvatar,
+);
 router.get('/me/favorites', verifyAccessToken, getMyFavorites);
 router.put(
   '/me/favorites',
@@ -29,6 +38,7 @@ router.put(
   validate(updateFavoritesSchema),
   updateMyFavorites,
 );
+router.get('/me/friends-activity', verifyAccessToken, getMyFriendsActivity);
 
 router.get('/:id', optionalAccessToken, getUserById);
 router.get('/:id/favorites', getUserFavoritesById);

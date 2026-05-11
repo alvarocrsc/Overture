@@ -57,12 +57,20 @@ export default function RecentActivityRow({
               </View>
               <View style={styles.ratingRow}>
                 <StarRating rating={item.rating_value} size={10} gap={1} />
+                {item.review_id != null ? (
+                  <Ionicons
+                    name="reader-outline"
+                    size={11}
+                    color={Colors.white}
+                    style={styles.metaIcon}
+                  />
+                ) : null}
                 {item.is_rewatch ? (
                   <Ionicons
                     name="refresh"
                     size={11}
                     color={Colors.accentBlue}
-                    style={styles.rewatchIcon}
+                    style={styles.metaIcon}
                   />
                 ) : null}
               </View>
@@ -120,7 +128,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  rewatchIcon: {
+  metaIcon: {
     marginLeft: 2,
   },
 });

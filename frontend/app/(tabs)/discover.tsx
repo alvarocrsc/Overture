@@ -43,8 +43,11 @@ export default function DiscoverScreen() {
     // TODO: route to a notifications screen once implemented.
   }
 
-  function handleCardPress(_film: TrendingFilm) {
-    // TODO: route to a film detail screen once implemented.
+  function handleCardPress(film: TrendingFilm) {
+    router.push({
+      pathname: '/film/[tmdbId]',
+      params: { tmdbId: film.tmdb_id.toString() },
+    } as never);
   }
 
   function handleWatchlistPress(_film: TrendingFilm) {
@@ -65,7 +68,6 @@ export default function DiscoverScreen() {
     director: null,
   }));
 
-  // Reuse the trending poster_paths to populate the suggestion-card collages.
   const suggestionPosters = trendingFilms
     .map((f) => f.poster_path)
     .filter((p): p is string => Boolean(p));

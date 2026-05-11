@@ -4,6 +4,7 @@ export interface Film {
   title: string;
   original_title: string | null;
   overview: string | null;
+  tagline: string | null;
   poster_path: string | null;
   backdrop_path: string | null;
   release_date: string | null;

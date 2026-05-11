@@ -80,6 +80,10 @@ function RootLayoutNav() {
                   <Stack.Screen name="index" options={{ headerShown: false }} />
                   <Stack.Screen name="(auth)" options={{ headerShown: false }} />
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="film/[tmdbId]" options={{ headerShown: false }} />
+                  <Stack.Screen name="series/[tmdbId]" options={{ headerShown: false }} />
+                  <Stack.Screen name="log" options={{ headerShown: false }} />
+                  <Stack.Screen name="review/[id]" options={{ headerShown: false }} />
                   <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                 </Stack>
                 <OverlayHost />

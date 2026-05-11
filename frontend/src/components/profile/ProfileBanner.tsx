@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  ActivityIndicator,
   ImageBackground,
   Pressable,
   StyleSheet,
@@ -26,6 +27,10 @@ interface ProfileBannerProps {
   onPressSettings?: () => void;
   onPressFollowers?: () => void;
   onPressFollowing?: () => void;
+  /** Tap handler for the avatar. Only wired when `isOwnProfile` is true. */
+  onAvatarPress?: () => void;
+  /** Show an upload spinner overlay on the avatar. */
+  isAvatarUploading?: boolean;
 }
 
 const BANNER_HEIGHT = 160;
@@ -48,6 +53,8 @@ export default function ProfileBanner({
   onPressSettings,
   onPressFollowers,
   onPressFollowing,
+  onAvatarPress,
+  isAvatarUploading = false,
 }: ProfileBannerProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const backdrop = backdropUrl(profile.profile_backdrop_path, 'w780');
@@ -113,11 +120,37 @@ export default function ProfileBanner({
       </View>
 
       <View style={[styles.avatarWrap, { top: insets.top + 5 }]}>
-        <UserAvatar
-          avatarUrl={profile.avatar_url}
-          username={profile.username}
-          size={AVATAR_SIZE}
-        />
+        {isOwnProfile ? (
+          <Pressable
+            onPress={onAvatarPress}
+            disabled={isAvatarUploading}
+            style={({ pressed }) => [
+              styles.avatarPressable,
+              pressed && styles.pressed,
+            ]}
+          >
+            <UserAvatar
+              avatarUrl={profile.avatar_url}
+              username={profile.username}
+              size={AVATAR_SIZE}
+            />
+            {isAvatarUploading ? (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator color={Colors.white} size="small" />
+              </View>
+            ) : (
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={12} color={Colors.white} />
+              </View>
+            )}
+          </Pressable>
+        ) : (
+          <UserAvatar
+            avatarUrl={profile.avatar_url}
+            username={profile.username}
+            size={AVATAR_SIZE}
+          />
+        )}
       </View>
 
       {/* Left column: name, @username, location */}
@@ -229,7 +262,32 @@ const styles = StyleSheet.create({
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
     backgroundColor: Colors.white,
-    overflow: 'hidden',
+    overflow: 'visible',
+  },
+  avatarPressable: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.accentBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.background,
+  },
+  uploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: AVATAR_SIZE / 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   leftColumn: {
     position: 'absolute',

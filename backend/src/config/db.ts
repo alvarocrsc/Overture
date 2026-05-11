@@ -53,6 +53,22 @@ export async function query<T>(sql: string, params?: SqlParam[]): Promise<T[]> {
 }
 
 /**
+ * Executes a SELECT that contains an `IN (?)` clause where one of the
+ * parameters is an array that must be expanded into a comma-separated list.
+ *
+ * mysql2's `pool.execute()` uses server-side prepared statements which do
+ * NOT expand JavaScript arrays — passing `[1,2,3]` against `IN (?)` either
+ * throws or silently matches nothing. `pool.query()` uses client-side
+ * escaping which DOES expand arrays into `(1, 2, 3)`. Use this helper for
+ * any query whose param list includes an array bound to an `IN (?)`
+ * placeholder.
+ */
+export async function queryMany<T>(sql: string, params?: SqlParam[]): Promise<T[]> {
+  const [rows] = await pool.query<mysql.RowDataPacket[]>(sql, params);
+  return rows as unknown as T[];
+}
+
+/**
  * Executes a write (INSERT / UPDATE / DELETE) statement and returns the
  * result header, which includes `insertId` and `affectedRows`.
  * @param sql - The SQL statement with `?` placeholders.

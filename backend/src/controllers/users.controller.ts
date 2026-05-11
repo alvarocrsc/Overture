@@ -84,3 +84,32 @@ export async function updateMyFavorites(req: Request, res: Response): Promise<vo
   const data = await usersService.updateUserFavorites(userId, req.body);
   res.status(200).json({ data });
 }
+
+/** GET /api/v1/users/me/friends-activity?type=film|series */
+export async function getMyFriendsActivity(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const rawType = req.query['type'];
+  const type = rawType === 'series' ? 'series' : 'film';
+  const data = await usersService.getFriendsActivity(userId, type);
+  res.status(200).json({ data });
+}
+
+/** POST /api/v1/users/me/avatar (multipart/form-data, field: `avatar`) */
+export async function uploadAvatar(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+
+  if (!req.file) {
+    throw new AppError('No image file provided', 400);
+  }
+
+  const avatarUrl = await usersService.uploadAvatar(
+    userId,
+    req.file.buffer,
+    req.file.mimetype,
+  );
+
+  res.status(200).json({
+    data: { avatar_url: avatarUrl },
+    message: 'Avatar updated successfully',
+  });
+}

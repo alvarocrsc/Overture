@@ -32,9 +32,13 @@ export function verifyAccessToken(
 }
 
 /**
- * Optional variant of `verifyAccessToken`. Decodes the Bearer token if
- * present and attaches `req.user`. If the header is missing or invalid,
- * the request continues anonymously without throwing.
+ * Optional variant of `verifyAccessToken`. If no Bearer token is present
+ * the request continues anonymously. If a Bearer token *is* present but
+ * fails to verify (expired, malformed, signed with a different secret),
+ * a 401 is thrown so the frontend's refresh interceptor can swap in a
+ * new access token — without this, per-user features layered on top of
+ * a "public" listing endpoint (custom posters, follow state, …) silently
+ * disappear the moment the access token expires.
  */
 export function optionalAccessToken(
   req: Request,
@@ -56,7 +60,7 @@ export function optionalAccessToken(
     const decoded = jwt.verify(token, secret) as AuthPayload;
     req.user = decoded;
   } catch {
-    // Silently ignore — treat as anonymous.
+    throw new AppError('Access token invalid or expired', 401);
   }
   next();
 }

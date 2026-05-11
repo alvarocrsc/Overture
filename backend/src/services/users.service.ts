@@ -1,4 +1,5 @@
 import { query, execute } from '../config/db';
+import cloudinary from '../config/cloudinary';
 import { AppError } from '../utils/app-error';
 import type {
   UpdateMeInput,
@@ -265,13 +266,17 @@ export async function getUserFavorites(
        uf.series_id,
        f.tmdb_id    AS film_tmdb_id,
        f.title      AS film_title,
-       f.poster_path AS film_poster,
+       COALESCE(pf.custom_poster_path, f.poster_path) AS film_poster,
        s.tmdb_id    AS series_tmdb_id,
        s.title      AS series_title,
-       s.poster_path AS series_poster
+       COALESCE(ps.custom_poster_path, s.poster_path) AS series_poster
      FROM user_favorites uf
      LEFT JOIN films  f ON f.id = uf.film_id
      LEFT JOIN series s ON s.id = uf.series_id
+     LEFT JOIN user_title_display_prefs pf
+       ON pf.user_id = uf.user_id AND pf.film_id   = f.id
+     LEFT JOIN user_title_display_prefs ps
+       ON ps.user_id = uf.user_id AND ps.series_id = s.id
      WHERE uf.user_id = ?
      ORDER BY uf.position ASC`,
     [userId],
@@ -408,4 +413,163 @@ export async function getFollowing(userId: number): Promise<PublicUser[]> {
      ORDER BY fl.created_at DESC`,
     [userId],
   );
+}
+
+/** A single row in the Home → Friends' Activity carousel. */
+export interface FriendActivityRow {
+  /** Rating id, used as a stable key in the frontend list. */
+  id: number;
+  /** Internal user id of the friend. */
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+  /** Friend's star rating (0.5–5). */
+  rating: number;
+  /** TMDB id of the film or series. */
+  tmdb_id: number;
+  title: string;
+  /** Poster honours the FRIEND's custom override (their take, their poster). */
+  poster_path: string | null;
+  /** True when the rating has an attached review. */
+  has_review: boolean;
+  /** ID of the attached review, or null when no review exists. */
+  review_id: number | null;
+  /** Discriminator used by the frontend to route taps to /film/ vs /series/. */
+  media_type: 'film' | 'series';
+}
+
+/**
+ * Returns the latest rating per followed user for the given media type.
+ * Designed to power the Home → Friends' Activity carousel. Each followed
+ * user contributes at most one row (their most recent watched_on, breaking
+ * ties on created_at) and rows where the title joined to NULL are excluded.
+ *
+ * @param viewerId - The currently authenticated user.
+ * @param type - 'film' to return film ratings only, 'series' for series only.
+ * @param limit - Maximum number of rows to return. Defaults to 20.
+ */
+export async function getFriendsActivity(
+  viewerId: number,
+  type: 'film' | 'series',
+  limit = 20,
+): Promise<FriendActivityRow[]> {
+  const clampedLimit = Math.min(Math.max(limit, 1), 50);
+
+  // Step 1: pick the latest rating id per followed user for the requested
+  // media type. Using a correlated subquery is cleaner than window functions
+  // here because it stays within standard MySQL 8 syntax and lets us reuse
+  // the same plan for either type.
+  const typeFilter = type === 'film' ? 'r.film_id IS NOT NULL' : 'r.series_id IS NOT NULL';
+
+  const rows = await query<{
+    id: number;
+    user_id: number;
+    username: string;
+    avatar_url: string | null;
+    value: number;
+    tmdb_id: number | null;
+    title: string | null;
+    poster_path: string | null;
+    review_id: number | null;
+  }>(
+    `SELECT
+       r.id,
+       u.id          AS user_id,
+       u.username,
+       u.avatar_url,
+       r.value,
+       ${type === 'film' ? 'f.tmdb_id' : 's.tmdb_id'}      AS tmdb_id,
+       ${type === 'film' ? 'f.title'   : 's.title'}        AS title,
+       COALESCE(
+         p.custom_poster_path,
+         ${type === 'film' ? 'f.poster_path' : 's.poster_path'}
+       ) AS poster_path,
+       rev.id        AS review_id
+     FROM follows fl
+     JOIN users u ON u.id = fl.following_id
+     JOIN ratings r
+       ON r.id = (
+         SELECT r2.id
+         FROM ratings r2
+         WHERE r2.user_id = fl.following_id
+           AND ${type === 'film' ? 'r2.film_id IS NOT NULL' : 'r2.series_id IS NOT NULL'}
+         ORDER BY r2.watched_on DESC, r2.created_at DESC
+         LIMIT 1
+       )
+     ${type === 'film'
+       ? 'LEFT JOIN films  f ON f.id = r.film_id'
+       : 'LEFT JOIN series s ON s.id = r.series_id'}
+     LEFT JOIN user_title_display_prefs p
+       ON p.user_id = u.id
+       AND ${type === 'film' ? 'p.film_id = f.id' : 'p.series_id = s.id'}
+     LEFT JOIN reviews rev ON rev.rating_id = r.id
+     WHERE fl.follower_id = ?
+       AND ${typeFilter}
+     ORDER BY r.watched_on DESC, r.created_at DESC
+     LIMIT ${clampedLimit}`,
+    [viewerId],
+  );
+
+  // Drop rows where the joined title is missing (orphaned rating) so the UI
+  // never has to render a blank poster.
+  return rows
+    .filter((r) => r.tmdb_id !== null && r.title !== null)
+    .map<FriendActivityRow>((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      username: r.username,
+      avatar_url: r.avatar_url,
+      rating: Number(r.value),
+      // Safe: filter above guarantees non-null.
+      tmdb_id: r.tmdb_id as number,
+      title: r.title as string,
+      poster_path: r.poster_path,
+      has_review: r.review_id !== null,
+      review_id: r.review_id,
+      media_type: type,
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// Avatar upload
+// ---------------------------------------------------------------------------
+
+/**
+ * Uploads an image buffer to Cloudinary under the `overture/avatars` folder
+ * and saves the resulting public URL on the user's `avatar_url` column.
+ *
+ * The Cloudinary public id is `user_<userId>` with `overwrite: true`, so
+ * each user only ever has one avatar asset on Cloudinary regardless of how
+ * many times they replace it.
+ *
+ * @param userId   The authenticated user's id.
+ * @param buffer   The raw image bytes from multer's memory storage.
+ * @param mimetype The MIME type of the uploaded file (jpeg/png/webp).
+ * @returns        The new public Cloudinary `secure_url`.
+ */
+export async function uploadAvatar(
+  userId: number,
+  buffer: Buffer,
+  mimetype: string,
+): Promise<string> {
+  await ensureUserExists(userId);
+
+  const dataUri = `data:${mimetype};base64,${buffer.toString('base64')}`;
+
+  const result = await cloudinary.uploader.upload(dataUri, {
+    folder: 'overture/avatars',
+    public_id: `user_${userId}`,
+    overwrite: true,
+    transformation: [
+      { width: 400, height: 400, crop: 'fill', gravity: 'face' },
+      { quality: 'auto', fetch_format: 'auto' },
+    ],
+  });
+
+  await execute('UPDATE users SET avatar_url = ? WHERE id = ?', [
+    result.secure_url,
+    userId,
+  ]);
+
+  return result.secure_url;
 }

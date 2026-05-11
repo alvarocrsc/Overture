@@ -7,6 +7,8 @@ import {
   unlikeReview,
   getReviewComments,
   createReviewComment,
+  likeComment,
+  unlikeComment,
 } from '../controllers/reviews.controller';
 import { verifyAccessToken } from '../middleware/auth';
 
@@ -19,5 +21,7 @@ router.post('/:id/like', verifyAccessToken, likeReview);
 router.delete('/:id/like', verifyAccessToken, unlikeReview);
 router.get('/:id/comments', getReviewComments);
 router.post('/:id/comments', verifyAccessToken, createReviewComment);
+router.post('/:id/comments/:commentId/like', verifyAccessToken, likeComment);
+router.delete('/:id/comments/:commentId/like', verifyAccessToken, unlikeComment);
 
 export default router;

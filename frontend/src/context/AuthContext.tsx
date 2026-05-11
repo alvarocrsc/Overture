@@ -28,6 +28,7 @@ export interface AuthContextType {
     password: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (partial: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -150,6 +151,16 @@ export default function AuthProvider({
     router.replace('/login');
   }, []);
 
+  /**
+   * Shallow-merges `partial` into the current user object so consumers
+   * (tab bar avatar, profile header, etc.) re-render immediately when a
+   * single field changes (e.g. after uploading a new avatar). No-op when
+   * there is no signed-in user.
+   */
+  const updateUser = useCallback((partial: Partial<User>): void => {
+    setUser((prev) => (prev ? { ...prev, ...partial } : prev));
+  }, []);
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -157,6 +168,7 @@ export default function AuthProvider({
     login,
     register,
     logout,
+    updateUser,
   };
 
   return (

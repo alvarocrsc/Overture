@@ -23,6 +23,8 @@ const refreshAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+let refreshPromise: Promise<string | null> | null = null;
+
 /**
  * The configured axios instance used by every screen and service in the app.
  * Automatically attaches the JWT access token to outgoing requests and
@@ -66,20 +68,29 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && config && !config._retry) {
       config._retry = true;
 
-      const refreshed = await refreshAxios
-        .post<{ data: { accessToken: string } }>('/auth/refresh-token')
-        .catch(async (): Promise<null> => {
-          await clearToken();
-          router.replace('/(auth)/login' as unknown as Href);
-          return null;
-        });
+      if (!refreshPromise) {
+        refreshPromise = refreshAxios
+          .post<{ data: { accessToken: string } }>('/auth/refresh-token')
+          .then(async (res) => {
+            const token = res.data.data.accessToken;
+            await setToken(token);
+            return token;
+          })
+          .catch(async (): Promise<null> => {
+            await clearToken();
+            router.replace('/(auth)/login' as unknown as Href);
+            return null;
+          })
+          .finally(() => {
+            refreshPromise = null;
+          });
+      }
 
-      if (refreshed === null) {
+      const newToken = await refreshPromise;
+      if (newToken === null) {
         return Promise.reject(error);
       }
 
-      const newToken = refreshed.data.data.accessToken;
-      await setToken(newToken);
       config.headers['Authorization'] = `Bearer ${newToken}`;
       return api(config);
     }

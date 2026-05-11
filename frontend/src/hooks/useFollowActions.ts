@@ -43,6 +43,7 @@ export function useFollowActions(
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['profile', targetUserId] }),
         queryClient.invalidateQueries({ queryKey: ['profile', 'me'] }),
+        queryClient.invalidateQueries({ queryKey: ['friends-activity'] }),
       ]);
     } catch {
       setIsFollowing(!next);

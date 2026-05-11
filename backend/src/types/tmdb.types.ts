@@ -18,6 +18,8 @@ export interface TmdbMovie {
 export interface TmdbMovieDetail extends TmdbMovie {
   genres: Array<{ id: number; name: string }>;
   runtime: number;
+  /** Marketing tagline, e.g. "In space no one can hear you scream." Empty string when absent. */
+  tagline: string;
 }
 
 /** A single image asset from TMDB (backdrop, poster, or logo). */
@@ -91,6 +93,12 @@ export interface TmdbSeriesDetail extends TmdbSeries {
   number_of_seasons: number;
   number_of_episodes: number;
   status: string;
+  /** Show creators as reported by TMDB. May be empty for documentaries / reality TV. */
+  created_by?: Array<{
+    id: number;
+    name: string;
+    profile_path: string | null;
+  }>;
 }
 
 /**
@@ -116,6 +124,52 @@ export type TmdbSeriesCrewMember = TmdbCrewMember;
  * Reuses TmdbCreditsResult since the shape is identical.
  */
 export type TmdbSeriesCreditsResult = TmdbCreditsResult;
+
+/**
+ * A single cast member from TMDB's /tv/{id}/aggregate_credits endpoint.
+ * Each member is the union of all their roles across every episode, so
+ * `roles` may contain several `{character, episode_count}` entries.
+ */
+export interface TmdbAggregateCastMember {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  order: number;
+  popularity: number;
+  roles: Array<{
+    character: string;
+    episode_count: number;
+  }>;
+  total_episode_count: number;
+}
+
+/**
+ * A single crew member from TMDB's /tv/{id}/aggregate_credits endpoint.
+ * Each member is the union of all jobs they performed on the show.
+ */
+export interface TmdbAggregateCrewMember {
+  id: number;
+  name: string;
+  profile_path: string | null;
+  department: string;
+  popularity: number;
+  jobs: Array<{
+    job: string;
+    episode_count: number;
+  }>;
+  total_episode_count: number;
+}
+
+/**
+ * Full season-aggregated cast and crew for a TV series. Returned by
+ * TMDB's /tv/{id}/aggregate_credits endpoint. Use this in preference to the
+ * raw /tv/{id}/credits endpoint, which only returns the most recent season's
+ * regular cast and is empty or incomplete for many shows.
+ */
+export interface TmdbAggregateCreditsResult {
+  cast: TmdbAggregateCastMember[];
+  crew: TmdbAggregateCrewMember[];
+}
 
 // ─── Search response types ────────────────────────────────────────────────────
 

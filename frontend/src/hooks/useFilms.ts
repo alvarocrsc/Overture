@@ -6,6 +6,8 @@ export interface FilmResult {
   tmdb_id: number;
   title: string;
   poster_path: string | null;
+  release_date?: string | null;
+  director?: string | null;
 }
 
 /** Paginated response shape from GET /films/trending and GET /films/search. */

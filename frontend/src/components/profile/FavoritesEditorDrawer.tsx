@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Modal,
   Pressable,
   StyleSheet,
@@ -10,7 +11,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -64,8 +64,8 @@ export default function FavoritesEditorDrawer({
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
-      backdropOpacity.value = withTiming(1, { duration: 250 });
+      translateY.value = withSpring(0, { damping: 38, stiffness: 160 });
+      backdropOpacity.value = withTiming(1, { duration: 300 });
     } else {
       translateY.value = DRAWER_HEIGHT;
       backdropOpacity.value = 0;
@@ -75,10 +75,9 @@ export default function FavoritesEditorDrawer({
   }, [visible, DRAWER_HEIGHT, translateY, backdropOpacity]);
 
   const closeDrawer = useCallback(() => {
-    translateY.value = withSpring(DRAWER_HEIGHT, { damping: 20, stiffness: 200 });
-    backdropOpacity.value = withTiming(0, { duration: 200 }, (finished) => {
-      if (finished) runOnJS(onClose)();
-    });
+    translateY.value = withSpring(DRAWER_HEIGHT, { damping: 38, stiffness: 160 });
+    backdropOpacity.value = withTiming(0, { duration: 220 });
+    setTimeout(onClose, 220);
   }, [DRAWER_HEIGHT, translateY, backdropOpacity, onClose]);
 
   const handleSearch = useCallback((text: string): void => {
@@ -110,6 +109,10 @@ export default function FavoritesEditorDrawer({
   );
 
   const panGesture = Gesture.Pan()
+    .runOnJS(true)
+    .onBegin(() => {
+      Keyboard.dismiss();
+    })
     .onUpdate((e) => {
       if (e.translationY > 0) {
         translateY.value = e.translationY;
@@ -117,9 +120,9 @@ export default function FavoritesEditorDrawer({
     })
     .onEnd((e) => {
       if (e.translationY > DRAWER_HEIGHT * 0.25 || e.velocityY > 800) {
-        runOnJS(closeDrawer)();
+        closeDrawer();
       } else {
-        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+        translateY.value = withSpring(0, { damping: 38, stiffness: 160 });
       }
     });
 
@@ -161,17 +164,19 @@ export default function FavoritesEditorDrawer({
             data={films}
             keyExtractor={(item) => String(item.tmdb_id)}
             renderItem={({ item }) => {
+              const yearLabel = item.release_date ? item.release_date.slice(0, 4) : null;
               const adapted: FilmSearchResult = {
                 type: 'film',
                 tmdbId: item.tmdb_id,
                 title: item.title,
                 posterPath: item.poster_path,
-                year: null,
-                director: null,
+                year: yearLabel,
+                director: item.director ?? null,
               };
               return (
                 <MediaSearchItem
                   item={adapted}
+                  hideActions
                   onPress={() => handleFilmPress(item)}
                   onLogPress={() => handleFilmPress(item)}
                   onWatchlistPress={() => handleFilmPress(item)}
@@ -181,6 +186,7 @@ export default function FavoritesEditorDrawer({
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             contentContainerStyle={styles.listContent}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             ListFooterComponent={
               activeQuery.isFetchingNextPage ? (

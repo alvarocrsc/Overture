@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Colors,
   TAB_BAR_BOTTOM_OFFSET,
@@ -28,6 +30,7 @@ import {
   useUpdateFavorites,
   type FavoriteInput,
 } from '@/src/hooks/useUpdateFavorites';
+import { useUploadAvatar } from '@/src/hooks/useUploadAvatar';
 import { useAuth } from '@/src/context/AuthContext';
 
 import type { UserProfile, UserFavorite } from '@/src/types/profile.types';
@@ -68,6 +71,8 @@ export default function ProfileView({
     viewingSelf ? undefined : profileId,
   );
   const { mutate: updateFavorites } = useUpdateFavorites();
+  const { mutate: uploadAvatar, isPending: isUploadingAvatar } =
+    useUploadAvatar();
 
   const followActions = useFollowActions(
     userId ?? -1,
@@ -110,6 +115,33 @@ export default function ProfileView({
     updateFavorites(updated);
   };
 
+  /**
+   * Opens the photo library so the user can pick + crop a square image,
+   * then uploads it to the backend. Only invoked for the signed-in user's
+   * own profile (the banner only wires this when `isOwnProfile` is true).
+   */
+  const handleAvatarPress = async (): Promise<void> => {
+    const { status } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission required',
+        'Please allow access to your photo library to change your profile picture.',
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+    uploadAvatar(result.assets[0].uri);
+  };
+
   const favorites = favoritesQuery.data ?? [];
   const recentItems = recentQuery.data ?? [];
   const hasFavorites = favorites.length > 0;
@@ -141,6 +173,12 @@ export default function ProfileView({
           isFollowing={followActions.isFollowing}
           isFollowPending={followActions.isPending}
           onPressFollow={() => void followActions.toggle()}
+          {...(viewingSelf
+            ? {
+                onAvatarPress: () => void handleAvatarPress(),
+                isAvatarUploading: isUploadingAvatar,
+              }
+            : {})}
           {...(onPressBack ? { onPressBack } : {})}
         />
 
@@ -157,7 +195,25 @@ export default function ProfileView({
         {hasActivity && (
           <>
             <View style={styles.gap12} />
-            <RecentActivityRow items={recentItems} />
+            <RecentActivityRow
+              items={recentItems}
+              onPressItem={(item) => {
+                if (item.review_id != null) {
+                  router.push({
+                    pathname: '/review/[id]',
+                    params: { id: String(item.review_id) },
+                  });
+                  return;
+                }
+                router.push({
+                  pathname:
+                    item.media_type === 'film'
+                      ? '/film/[tmdbId]'
+                      : '/series/[tmdbId]',
+                  params: { tmdbId: String(item.tmdb_id) },
+                } as never);
+              }}
+            />
           </>
         )}
 

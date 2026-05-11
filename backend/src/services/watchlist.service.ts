@@ -70,17 +70,21 @@ export async function getWatchlist(
        w.added_at,
        f.tmdb_id       AS film_tmdb_id,
        f.title         AS film_title,
-       f.poster_path   AS film_poster,
+       COALESCE(pf.custom_poster_path, f.poster_path) AS film_poster,
        f.release_date  AS film_release_date,
        f.tmdb_rating   AS film_rating,
        s.tmdb_id       AS series_tmdb_id,
        s.title         AS series_title,
-       s.poster_path   AS series_poster,
+       COALESCE(ps.custom_poster_path, s.poster_path) AS series_poster,
        s.first_air_date AS series_first_air_date,
        s.tmdb_rating   AS series_rating
      FROM watchlist w
      LEFT JOIN films  f ON w.film_id   = f.id
      LEFT JOIN series s ON w.series_id = s.id
+     LEFT JOIN user_title_display_prefs pf
+       ON pf.user_id = w.user_id AND pf.film_id   = f.id
+     LEFT JOIN user_title_display_prefs ps
+       ON ps.user_id = w.user_id AND ps.series_id = s.id
      ${baseWhere}
      ORDER BY w.priority DESC, w.added_at DESC
      LIMIT ${clampedLimit} OFFSET ${offset}`,

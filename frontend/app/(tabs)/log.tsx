@@ -56,8 +56,6 @@ export default function LogScreen() {
     }, [invalidate]),
   );
 
-  // When the screen mounts via the Discover-bar shortcut (?focus=true),
-  // open the keyboard immediately so typing works without an extra tap.
   useEffect(() => {
     if (params.focus === 'true') {
       const t = setTimeout(() => inputRef.current?.focus(), 50);
@@ -67,6 +65,27 @@ export default function LogScreen() {
   }, [params.focus]);
 
   const isSearching = query.trim().length >= 2;
+
+  /**
+   * Navigates to the appropriate detail screen for a tapped search result.
+   * Only film and series results currently have a destination route.
+   */
+  const navigateToResult = useCallback(
+    (r: SearchResult): void => {
+      if (r.type === 'film') {
+        router.push({
+          pathname: '/film/[tmdbId]',
+          params: { tmdbId: r.tmdbId.toString() },
+        } as never);
+      } else if (r.type === 'series') {
+        router.push({
+          pathname: '/series/[tmdbId]',
+          params: { tmdbId: r.tmdbId.toString() },
+        } as never);
+      }
+    },
+    [router],
+  );
 
   return (
     <View style={styles.screen}>
@@ -127,7 +146,10 @@ export default function LogScreen() {
                     <SearchResultItem
                       key={`${r.type}-${itemKey(r)}`}
                       result={r}
-                      onPress={() => recordTap(r)}
+                      onPress={() => {
+                        recordTap(r);
+                        navigateToResult(r);
+                      }}
                     />
                   ))}
                 </View>
@@ -148,7 +170,10 @@ export default function LogScreen() {
                       <SearchResultItem
                         key={entry.rowId}
                         result={entry.result}
-                        onPress={() => recordTap(entry.result)}
+                        onPress={() => {
+                          recordTap(entry.result);
+                          navigateToResult(entry.result);
+                        }}
                         onRemove={() => removeItem(entry.rowId)}
                       />
                     ))}
@@ -163,16 +188,22 @@ export default function LogScreen() {
                 <View style={styles.list}>
                   {trending.slice(0, 20).map((film) => {
                     const item = trendingToFilmResult(film);
+                    const goToFilm = (): void => {
+                      router.push({
+                        pathname: '/film/[tmdbId]',
+                        params: { tmdbId: film.tmdb_id.toString() },
+                      } as never);
+                    };
                     return (
                       <MediaSearchItem
                         key={film.tmdb_id}
                         item={item}
                         onPress={() => {
                           recordTap(item);
-                          router.push(`/film/${film.tmdb_id}` as never);
+                          goToFilm();
                         }}
-                        onLogPress={() => router.push(`/film/${film.tmdb_id}` as never)}
-                        onWatchlistPress={() => router.push(`/film/${film.tmdb_id}` as never)}
+                        onLogPress={goToFilm}
+                        onWatchlistPress={goToFilm}
                       />
                     );
                   })}

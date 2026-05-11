@@ -1,8 +1,7 @@
-import { query, execute } from '../config/db';
+import { query, queryMany, execute } from '../config/db';
 import * as tmdbService from './tmdb.service';
 import { AppError } from '../utils/app-error';
 import type { Series } from '../models/series.model';
-import type { SeriesCredit } from '../models/series-credit.model';
 import type { TmdbSeries, TmdbImage } from '../types/tmdb.types';
 
 /** A Series row enriched with its genre list. Genre IDs are TMDB genre IDs. */
@@ -36,6 +35,19 @@ export interface SeriesCreditsResponse {
     profile_path: string | null;
     popularity: number | null;
   }>;
+  /**
+   * Full crew across every season, plus a synthesised entry per show creator
+   * (job === 'Creator', sourced from /tv/{id}.created_by). Sorted with
+   * Creator first, then by department importance and TMDB popularity.
+   */
+  crew: Array<{
+    person_tmdb_id: number;
+    person_name: string;
+    job: string;
+    department: string;
+    profile_path: string | null;
+    popularity: number | null;
+  }>;
 }
 
 /**
@@ -44,7 +56,7 @@ export interface SeriesCreditsResponse {
  * episode_run_time array is empty (list endpoints often omit it).
  * @param series - The TMDB series object to cache.
  */
-async function upsertSeries(series: TmdbSeries): Promise<void> {
+export async function upsertSeries(series: TmdbSeries): Promise<void> {
   const episodeRuntime = series.episode_run_time?.[0] ?? null;
   await execute(
     `INSERT INTO series
@@ -103,12 +115,14 @@ async function loadGenresForSeries(
  * local series cache, and returns the TMDB response directly.
  * @returns An array of TmdbSeries objects.
  */
-export async function getTrendingSeries(): Promise<TmdbSeries[]> {
+export async function getTrendingSeries(
+  userId: number | null = null,
+): Promise<TmdbSeries[]> {
   const series = await tmdbService.getTrendingSeries();
   for (const s of series) {
     await upsertSeries(s);
   }
-  return series;
+  return applySeriesDisplayPrefs(series, userId);
 }
 
 /**
@@ -116,12 +130,14 @@ export async function getTrendingSeries(): Promise<TmdbSeries[]> {
  * cache, and returns the TMDB response directly.
  * @returns An array of TmdbSeries objects.
  */
-export async function getNewSeries(): Promise<TmdbSeries[]> {
+export async function getNewSeries(
+  userId: number | null = null,
+): Promise<TmdbSeries[]> {
   const series = await tmdbService.getNewSeries();
   for (const s of series) {
     await upsertSeries(s);
   }
-  return series;
+  return applySeriesDisplayPrefs(series, userId);
 }
 
 /**
@@ -130,12 +146,54 @@ export async function getNewSeries(): Promise<TmdbSeries[]> {
  * @param searchQuery - The user-provided search term.
  * @returns An array of TmdbSeries objects.
  */
-export async function searchSeries(searchQuery: string): Promise<TmdbSeries[]> {
+export async function searchSeries(
+  searchQuery: string,
+  userId: number | null = null,
+): Promise<TmdbSeries[]> {
   const series = await tmdbService.searchSeries(searchQuery);
   for (const s of series) {
     await upsertSeries(s);
   }
-  return series;
+  return applySeriesDisplayPrefs(series, userId);
+}
+
+/**
+ * Overlays the authenticated user's saved custom poster / backdrop overrides
+ * onto a list of TmdbSeries results, keyed by TMDB id. No-ops when userId is
+ * null or the list is empty.
+ * @param items - The TMDB series to enrich.
+ * @param userId - Authenticated user ID, or null.
+ * @returns A new array of series with poster_path / backdrop_path overridden
+ *          where the user has saved a custom selection.
+ */
+export async function applySeriesDisplayPrefs<T extends TmdbSeries>(
+  items: T[],
+  userId: number | null,
+): Promise<T[]> {
+  if (userId === null || items.length === 0) return items;
+  const tmdbIds = items.map((s) => s.id);
+  const rows = await queryMany<{
+    tmdb_id: number;
+    custom_poster_path: string | null;
+    custom_backdrop_path: string | null;
+  }>(
+    `SELECT s.tmdb_id, p.custom_poster_path, p.custom_backdrop_path
+     FROM user_title_display_prefs p
+     JOIN series s ON s.id = p.series_id
+     WHERE p.user_id = ? AND s.tmdb_id IN (?)`,
+    [userId, tmdbIds],
+  );
+  if (rows.length === 0) return items;
+  const map = new Map(rows.map((r) => [r.tmdb_id, r]));
+  return items.map((s) => {
+    const override = map.get(s.id);
+    if (!override) return s;
+    return {
+      ...s,
+      poster_path: override.custom_poster_path ?? s.poster_path,
+      backdrop_path: override.custom_backdrop_path ?? s.backdrop_path,
+    };
+  });
 }
 
 /**
@@ -317,11 +375,20 @@ export async function getSeriesImages(tmdbId: number): Promise<SeriesImagesRespo
 }
 
 /**
- * Returns credits for a series. Serves from the local series_credits cache when
- * available; otherwise fetches from TMDB, caches directors and top-15 cast,
- * then returns the result.
+ * Returns credits for a series. Always fetches season-aggregated cast and
+ * crew from TMDB's /tv/{id}/aggregate_credits (the regular /credits endpoint
+ * returns the most recent season only and is empty for many shows). Also
+ * pulls /tv/{id} so the show creators can be surfaced under the Crew tab as
+ * synthesised entries with job === 'Creator'.
+ *
+ * The local series_credits cache is refreshed with the top-billed actors so
+ * downstream features (carousels, recommendations) can keep querying it; the
+ * cache cannot store arbitrary crew jobs because series_credits.role is an
+ * ENUM('director','actor','writer'), so the full crew is always returned
+ * straight from TMDB rather than persisted.
+ *
  * @param tmdbId - The TMDB series ID.
- * @returns A SeriesCreditsResponse with directors and cast arrays.
+ * @returns A SeriesCreditsResponse with directors, cast, and full crew arrays.
  */
 export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsResponse> {
   const [series] = await query<{ id: number }>(
@@ -329,47 +396,89 @@ export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsRes
     [tmdbId],
   );
 
+  const [credits, detail] = await Promise.all([
+    tmdbService.getSeriesAggregateCredits(tmdbId),
+    tmdbService.getSeriesById(tmdbId),
+  ]);
+
+  // Flatten aggregate crew: TMDB reports one entry per person with a `jobs`
+  // array; we expand into one row per (person, job) so the UI can show, say,
+  // both "Writer" and "Executive Producer" for the same person.
+  const flatCrew = credits.crew.flatMap((member) =>
+    member.jobs.map((j) => ({
+      id: member.id,
+      name: member.name,
+      profile_path: member.profile_path,
+      department: member.department,
+      popularity: member.popularity,
+      job: j.job,
+      episode_count: j.episode_count,
+    })),
+  );
+
+  // Synthesise a Creator entry per show creator. created_by is the canonical
+  // source for "Created by" on TMDB and is missing from the credits endpoints.
+  const creators = (detail.created_by ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    profile_path: c.profile_path,
+    department: 'Creators',
+    popularity: null as number | null,
+    job: 'Creator',
+    episode_count: 0,
+  }));
+
+  // Deduplicate: if a creator also appears in flatCrew under a real job, keep
+  // both rows so the UI shows "Creator" plus their other credits.
+  const allCrew = [...creators, ...flatCrew];
+
+  // Department priority places Creators/Directors first so the Crew tab leads
+  // with the most prominent collaborators.
+  const departmentRank: Record<string, number> = {
+    Creators: 0,
+    Directing: 1,
+    Writing: 2,
+    Production: 3,
+    Editing: 4,
+    Camera: 5,
+    Sound: 6,
+    Art: 7,
+    'Visual Effects': 8,
+    'Costume & Make-Up': 9,
+    Lighting: 10,
+    Crew: 11,
+    Actors: 99,
+  };
+  const sortedCrew = allCrew.sort((a, b) => {
+    const ra = departmentRank[a.department] ?? 50;
+    const rb = departmentRank[b.department] ?? 50;
+    if (ra !== rb) return ra - rb;
+    return (b.popularity ?? 0) - (a.popularity ?? 0);
+  });
+
+  // Pick the most appearances-per-character as the displayed character name.
+  const cast = credits.cast.map((member) => {
+    const primaryRole = member.roles.slice().sort(
+      (a, b) => b.episode_count - a.episode_count,
+    )[0];
+    return {
+      id: member.id,
+      name: member.name,
+      profile_path: member.profile_path,
+      character: primaryRole?.character ?? null,
+      order: member.order,
+      popularity: member.popularity,
+    };
+  });
+
+  const directorsTmdb = flatCrew.filter((m) => m.job === 'Director');
+
   if (series) {
-    const localCredits = await query<SeriesCredit>(
-      `SELECT id, series_id, person_tmdb_id, person_name, role, character_name,
-              profile_path, popularity, cast_order
-       FROM series_credits WHERE series_id = ?`,
-      [series.id],
-    );
-
-    if (localCredits.length > 0) {
-      return {
-        directors: localCredits
-          .filter((c) => c.role === 'director')
-          .map((c) => ({
-            person_tmdb_id: c.person_tmdb_id,
-            person_name: c.person_name,
-            profile_path: c.profile_path,
-            popularity: c.popularity,
-          })),
-        cast: localCredits
-          .filter((c) => c.role === 'actor')
-          .map((c) => ({
-            person_tmdb_id: c.person_tmdb_id,
-            person_name: c.person_name,
-            character_name: c.character_name,
-            cast_order: c.cast_order,
-            profile_path: c.profile_path,
-            popularity: c.popularity,
-          })),
-      };
-    }
-  }
-
-  // No local cache — fetch from TMDB.
-  const credits = await tmdbService.getSeriesCredits(tmdbId);
-  const directors = credits.crew.filter((m) => m.job === 'Director');
-  const cast = credits.cast;
-
-  if (series) {
+    // Refresh director/actor cache rows so other features (carousels,
+    // recommendations) still return populated lists.
     await execute(`DELETE FROM series_credits WHERE series_id = ?`, [series.id]);
 
-    for (const director of directors) {
+    for (const director of directorsTmdb) {
       await execute(
         `INSERT INTO series_credits
            (series_id, person_tmdb_id, person_name, role, profile_path, popularity)
@@ -398,7 +507,7 @@ export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsRes
   }
 
   return {
-    directors: directors.map((m) => ({
+    directors: directorsTmdb.map((m) => ({
       person_tmdb_id: m.id,
       person_name: m.name,
       profile_path: m.profile_path ?? null,
@@ -412,5 +521,449 @@ export async function getSeriesCredits(tmdbId: number): Promise<SeriesCreditsRes
       profile_path: m.profile_path ?? null,
       popularity: m.popularity ?? null,
     })),
+    crew: sortedCrew.map((m) => ({
+      person_tmdb_id: m.id,
+      person_name: m.name,
+      job: m.job,
+      department: m.department,
+      profile_path: m.profile_path ?? null,
+      popularity: m.popularity ?? null,
+    })),
   };
+}
+
+// ─── Detail enrichment ───────────────────────────────────────────────────────
+
+/** Per-user enrichment fields layered on top of the base series cache. */
+export interface SeriesUserContext {
+  is_logged: boolean;
+  is_in_watchlist: boolean;
+  /** ID of the watchlist row when is_in_watchlist is true, else null. */
+  watchlist_id: number | null;
+  is_liked: boolean;
+  user_rating: number | null;
+  user_log_count: number;
+}
+
+/** Custom display paths the authenticated user has saved for this title. */
+export interface SeriesDisplayPrefs {
+  custom_poster_path: string | null;
+  custom_backdrop_path: string | null;
+}
+
+/** Full series detail returned by GET /series/:tmdbId. */
+export interface SeriesDetailResponse extends SeriesWithGenres {
+  custom_poster_path: string | null;
+  custom_backdrop_path: string | null;
+  is_logged: boolean;
+  is_in_watchlist: boolean;
+  /** ID of the watchlist row when is_in_watchlist is true, else null. */
+  watchlist_id: number | null;
+  is_liked: boolean;
+  user_rating: number | null;
+  user_log_count: number;
+}
+
+async function loadSeriesUserContext(
+  seriesId: number,
+  userId: number | null,
+): Promise<SeriesUserContext> {
+  if (userId === null) {
+    return {
+      is_logged: false,
+      is_in_watchlist: false,
+      watchlist_id: null,
+      is_liked: false,
+      user_rating: null,
+      user_log_count: 0,
+    };
+  }
+
+  const [ratingAgg] = await query<{
+    log_count: number;
+    latest_value: number | null;
+  }>(
+    `SELECT COUNT(*) AS log_count,
+            (SELECT value FROM ratings
+             WHERE user_id = ? AND series_id = ?
+             ORDER BY created_at DESC LIMIT 1) AS latest_value
+     FROM ratings
+     WHERE user_id = ? AND series_id = ?`,
+    [userId, seriesId, userId, seriesId],
+  );
+
+  const [watchlistRow] = await query<{ watchlist_id: number }>(
+    `SELECT w.id AS watchlist_id
+     FROM watchlist w
+     WHERE w.user_id = ? AND w.series_id = ?
+     LIMIT 1`,
+    [userId, seriesId],
+  );
+
+  const [likeRow] = await query<{ id: number }>(
+    `SELECT id FROM title_likes WHERE user_id = ? AND series_id = ? LIMIT 1`,
+    [userId, seriesId],
+  );
+
+  const logCount = Number(ratingAgg?.log_count ?? 0);
+  const latestValue =
+    ratingAgg?.latest_value !== null && ratingAgg?.latest_value !== undefined
+      ? Number(ratingAgg.latest_value)
+      : null;
+
+  return {
+    is_logged: logCount > 0,
+    is_in_watchlist: Boolean(watchlistRow),
+    watchlist_id: watchlistRow?.watchlist_id ?? null,
+    is_liked: Boolean(likeRow),
+    user_rating: latestValue,
+    user_log_count: logCount,
+  };
+}
+
+async function loadSeriesDisplayPrefs(
+  seriesId: number,
+  userId: number | null,
+): Promise<SeriesDisplayPrefs> {
+  if (userId === null) {
+    return { custom_poster_path: null, custom_backdrop_path: null };
+  }
+  const [row] = await query<SeriesDisplayPrefs>(
+    `SELECT custom_poster_path, custom_backdrop_path
+     FROM user_title_display_prefs
+     WHERE user_id = ? AND series_id = ?
+     LIMIT 1`,
+    [userId, seriesId],
+  );
+  return {
+    custom_poster_path: row?.custom_poster_path ?? null,
+    custom_backdrop_path: row?.custom_backdrop_path ?? null,
+  };
+}
+
+/**
+ * Returns full series detail enriched with per-user context and display prefs.
+ */
+export async function getSeriesDetail(
+  tmdbId: number,
+  userId: number | null,
+): Promise<SeriesDetailResponse> {
+  const base = await getSeriesById(tmdbId);
+  const [userCtx, displayPrefs] = await Promise.all([
+    loadSeriesUserContext(base.id, userId),
+    loadSeriesDisplayPrefs(base.id, userId),
+  ]);
+  return {
+    ...base,
+    custom_poster_path: displayPrefs.custom_poster_path,
+    custom_backdrop_path: displayPrefs.custom_backdrop_path,
+    ...userCtx,
+  };
+}
+
+// ─── Rating distribution ─────────────────────────────────────────────────────
+
+export interface SeriesDistributionBin {
+  value: number;
+  count: number;
+}
+
+export interface SeriesDistributionResponse {
+  distribution: SeriesDistributionBin[];
+  average: number | null;
+}
+
+export async function getSeriesRatingDistribution(
+  tmdbId: number,
+): Promise<SeriesDistributionResponse> {
+  const [s] = await query<{ id: number }>(
+    `SELECT id FROM series WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!s) return { distribution: [], average: null };
+
+  const [rows, [avgRow]] = await Promise.all([
+    query<{ value: number | string; count: number | string }>(
+      `SELECT value, COUNT(*) AS count
+       FROM ratings
+       WHERE series_id = ? AND is_rewatch = 0
+       GROUP BY value
+       ORDER BY value ASC`,
+      [s.id],
+    ),
+    query<{ avg: number | string | null }>(
+      `SELECT AVG(value) AS avg FROM ratings
+       WHERE series_id = ? AND is_rewatch = 0`,
+      [s.id],
+    ),
+  ]);
+
+  return {
+    distribution: rows.map((r) => ({
+      value: Number(r.value),
+      count: Number(r.count),
+    })),
+    average:
+      avgRow?.avg !== null && avgRow?.avg !== undefined
+        ? Number(avgRow.avg)
+        : null,
+  };
+}
+
+// ─── Watched by / Want to watch ──────────────────────────────────────────────
+
+export interface SeriesWatchedByRow {
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+  rating: number | null;
+  is_rewatch: boolean;
+  has_review: boolean;
+  review_id: number | null;
+}
+
+export interface SeriesWatchlistedByRow {
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+}
+
+const SOCIAL_LIMIT = 20;
+
+export async function getSeriesWatchedBy(
+  tmdbId: number,
+  userId: number | null,
+): Promise<SeriesWatchedByRow[]> {
+  const [s] = await query<{ id: number }>(
+    `SELECT id FROM series WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!s) return [];
+
+  const rows = await query<{
+    user_id: number;
+    username: string;
+    avatar_url: string | null;
+    rating: number | string;
+    is_rewatch: number;
+    has_review: number;
+    review_id: number | null;
+    is_friend: number;
+  }>(
+    `SELECT
+       u.id AS user_id,
+       u.username,
+       u.avatar_url,
+       r.value AS rating,
+       r.is_rewatch,
+       (CASE WHEN rv.id IS NOT NULL THEN 1 ELSE 0 END) AS has_review,
+       rv.id AS review_id,
+       (CASE WHEN ? IS NOT NULL AND f.follower_id IS NOT NULL THEN 1 ELSE 0 END) AS is_friend
+     FROM ratings r
+     JOIN users u ON u.id = r.user_id
+     LEFT JOIN reviews rv ON rv.rating_id = r.id
+     LEFT JOIN follows f ON f.follower_id = ? AND f.following_id = u.id
+     WHERE r.series_id = ?
+       AND (? IS NULL OR u.id != ?)
+     GROUP BY u.id, u.username, u.avatar_url, r.value, r.is_rewatch, r.created_at, rv.id, f.follower_id
+     ORDER BY is_friend DESC, r.created_at DESC
+     LIMIT ${SOCIAL_LIMIT}`,
+    [userId, userId, s.id, userId, userId],
+  );
+
+  return rows.map((r) => ({
+    user_id: r.user_id,
+    username: r.username,
+    avatar_url: r.avatar_url,
+    rating: Number(r.rating),
+    is_rewatch: Boolean(r.is_rewatch),
+    has_review: Boolean(r.has_review),
+    review_id: r.review_id,
+  }));
+}
+
+export async function getSeriesWatchlistedBy(
+  tmdbId: number,
+  userId: number | null,
+): Promise<SeriesWatchlistedByRow[]> {
+  const [s] = await query<{ id: number }>(
+    `SELECT id FROM series WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!s) return [];
+
+  const rows = await query<{
+    user_id: number;
+    username: string;
+    avatar_url: string | null;
+    is_friend: number;
+  }>(
+    `SELECT
+       u.id AS user_id,
+       u.username,
+       u.avatar_url,
+       (CASE WHEN ? IS NOT NULL AND f.follower_id IS NOT NULL THEN 1 ELSE 0 END) AS is_friend
+     FROM watchlist w
+     JOIN users u ON u.id = w.user_id
+     LEFT JOIN follows f ON f.follower_id = ? AND f.following_id = u.id
+     WHERE w.series_id = ?
+       AND (? IS NULL OR u.id != ?)
+     ORDER BY is_friend DESC, w.added_at DESC
+     LIMIT ${SOCIAL_LIMIT}`,
+    [userId, userId, s.id, userId, userId],
+  );
+
+  return rows.map((r) => ({
+    user_id: r.user_id,
+    username: r.username,
+    avatar_url: r.avatar_url,
+  }));
+}
+
+// ─── My logs ─────────────────────────────────────────────────────────────────
+
+export interface SeriesMyLogRow {
+  id: number;
+  value: number;
+  watched_on: string | null;
+  is_rewatch: boolean;
+  review_id: number | null;
+  created_at: Date;
+}
+
+export async function getSeriesMyLogs(
+  tmdbId: number,
+  userId: number,
+): Promise<SeriesMyLogRow[]> {
+  const [s] = await query<{ id: number }>(
+    `SELECT id FROM series WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!s) return [];
+
+  const rows = await query<{
+    id: number;
+    value: number | string;
+    watched_on: string | null;
+    is_rewatch: number;
+    review_id: number | null;
+    created_at: Date;
+  }>(
+    `SELECT r.id, r.value, r.watched_on, r.is_rewatch, rv.id AS review_id, r.created_at
+     FROM ratings r
+     LEFT JOIN reviews rv ON rv.rating_id = r.id
+     WHERE r.user_id = ? AND r.series_id = ?
+     ORDER BY r.created_at DESC`,
+    [userId, s.id],
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    value: Number(r.value),
+    watched_on: r.watched_on,
+    is_rewatch: Boolean(r.is_rewatch),
+    review_id: r.review_id,
+    created_at: r.created_at,
+  }));
+}
+
+// ─── Display prefs ───────────────────────────────────────────────────────────
+
+export async function getSeriesDisplayPrefs(
+  tmdbId: number,
+  userId: number,
+): Promise<SeriesDisplayPrefs | null> {
+  const [s] = await query<{ id: number }>(
+    `SELECT id FROM series WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!s) return null;
+  const [row] = await query<SeriesDisplayPrefs>(
+    `SELECT custom_poster_path, custom_backdrop_path
+     FROM user_title_display_prefs
+     WHERE user_id = ? AND series_id = ? LIMIT 1`,
+    [userId, s.id],
+  );
+  return row
+    ? {
+        custom_poster_path: row.custom_poster_path ?? null,
+        custom_backdrop_path: row.custom_backdrop_path ?? null,
+      }
+    : null;
+}
+
+export async function setSeriesDisplayPrefs(
+  tmdbId: number,
+  userId: number,
+  posterPath: string | null | undefined,
+  backdropPath: string | null | undefined,
+): Promise<SeriesDisplayPrefs> {
+  const base = await getSeriesById(tmdbId);
+  const seriesId = base.id;
+
+  const [existing] = await query<SeriesDisplayPrefs>(
+    `SELECT custom_poster_path, custom_backdrop_path
+     FROM user_title_display_prefs
+     WHERE user_id = ? AND series_id = ? LIMIT 1`,
+    [userId, seriesId],
+  );
+
+  const nextPoster =
+    posterPath === undefined
+      ? existing?.custom_poster_path ?? null
+      : posterPath;
+  const nextBackdrop =
+    backdropPath === undefined
+      ? existing?.custom_backdrop_path ?? null
+      : backdropPath;
+
+  await execute(
+    `INSERT INTO user_title_display_prefs
+       (user_id, series_id, custom_poster_path, custom_backdrop_path)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       custom_poster_path   = VALUES(custom_poster_path),
+       custom_backdrop_path = VALUES(custom_backdrop_path)`,
+    [userId, seriesId, nextPoster, nextBackdrop],
+  );
+
+  return {
+    custom_poster_path: nextPoster,
+    custom_backdrop_path: nextBackdrop,
+  };
+}
+
+// ─── Likes ───────────────────────────────────────────────────────────────────
+
+/**
+ * Hearts a series for the authenticated user. Idempotent — re-liking silently
+ * succeeds. Throws 404 if the series does not exist (after the local cache
+ * hydration handled by getSeriesById).
+ * @param tmdbId - The TMDB series ID.
+ * @param userId - Authenticated user ID.
+ */
+export async function likeSeries(tmdbId: number, userId: number): Promise<void> {
+  const base = await getSeriesById(tmdbId);
+  await execute(
+    `INSERT IGNORE INTO title_likes (user_id, series_id) VALUES (?, ?)`,
+    [userId, base.id],
+  );
+}
+
+/**
+ * Removes a heart on a series for the authenticated user. Idempotent — a
+ * missing row is treated as success.
+ * @param tmdbId - The TMDB series ID.
+ * @param userId - Authenticated user ID.
+ */
+export async function unlikeSeries(tmdbId: number, userId: number): Promise<void> {
+  const [s] = await query<{ id: number }>(
+    `SELECT id FROM series WHERE tmdb_id = ?`,
+    [tmdbId],
+  );
+  if (!s) return;
+  await execute(
+    `DELETE FROM title_likes WHERE user_id = ? AND series_id = ?`,
+    [userId, s.id],
+  );
 }
