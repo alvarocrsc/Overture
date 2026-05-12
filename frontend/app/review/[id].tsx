@@ -32,6 +32,8 @@ import {
   Colors,
   FontFamily,
   LetterSpacing,
+  TAB_BAR_HEIGHT,
+  TAB_BAR_BOTTOM_OFFSET,
 } from '@/src/lib/colors';
 import { timeAgo } from '@/src/lib/timeAgo';
 import { backdropUrl } from '@/src/lib/tmdb';
@@ -94,10 +96,20 @@ interface DataListResponse<T> {
  * count / share), then nested Comments section.
  * Sticky bottom: "Add a comment" input, accounting for tab bar inset.
  */
-export default function ReviewScreen(): React.JSX.Element {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const reviewIdNum = Number(id);
-  const reviewId = Number.isFinite(reviewIdNum) ? reviewIdNum : null;
+interface ReviewScreenProps {
+  /** When provided, used instead of the route's `useLocalSearchParams`. */
+  id?: number;
+  /** When provided, overrides `router.back()` for the back chevron. */
+  onPressBack?: () => void;
+}
+
+export default function ReviewScreen(
+  { id: idProp, onPressBack }: ReviewScreenProps = {},
+): React.JSX.Element {
+  const { id: idParam } = useLocalSearchParams<{ id: string }>();
+  const paramReviewIdNum = Number(idParam);
+  const paramReviewId = Number.isFinite(paramReviewIdNum) ? paramReviewIdNum : null;
+  const reviewId = idProp ?? paramReviewId;
 
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -247,7 +259,8 @@ export default function ReviewScreen(): React.JSX.Element {
     router.push(pathname);
   };
 
-  const bottomInset = Math.max(insets.bottom, 8);
+  const bottomInset =
+    Math.max(insets.bottom, 8) + TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + 8;
 
   return (
     <View style={styles.container}>
@@ -278,7 +291,7 @@ export default function ReviewScreen(): React.JSX.Element {
           {/* Top chrome (back / more) over the backdrop */}
           <View style={[styles.topChrome, { top: insets.top + 16 }]}>
             <Pressable
-              onPress={() => router.back()}
+              onPress={onPressBack ?? (() => router.back())}
               hitSlop={12}
               style={({ pressed }) => [
                 styles.iconBtn,

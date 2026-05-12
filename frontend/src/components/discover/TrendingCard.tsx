@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import { backdropUrl } from '@/src/lib/tmdb';
 import { useFilmTrailer } from '@/src/hooks/useFilmTrailer';
+import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
 import YoutubeBackgroundPlayer from './YoutubeBackgroundPlayer';
 
 export interface TrendingFilm {
@@ -25,7 +26,6 @@ interface Props {
   muted?: boolean;
   onToggleMute?: () => void;
   onPress?: () => void;
-  onWatchlistPress?: () => void;
 }
 
 const CARD_WIDTH = 350;
@@ -42,10 +42,10 @@ export default function TrendingCard({
   muted = true,
   onToggleMute,
   onPress,
-  onWatchlistPress,
 }: Props) {
   const [isReady, setIsReady] = useState(false);
   const { data: trailerKey } = useFilmTrailer(film?.tmdb_id);
+  const watchlist = useWatchlistToggle(film?.tmdb_id ?? 0, 'film');
 
   useEffect(() => {
     if (!active) setIsReady(false);
@@ -152,11 +152,15 @@ export default function TrendingCard({
           {film.overview}
         </Text>
         <Pressable
-          onPress={onWatchlistPress}
+          onPress={watchlist.toggle}
           hitSlop={10}
           style={styles.bookmarkButton}
         >
-          <Ionicons name="bookmark-outline" size={20} color={Colors.white} />
+          <Ionicons
+            name={watchlist.inWatchlist ? 'bookmark' : 'bookmark-outline'}
+            size={20}
+            color={Colors.white}
+          />
         </Pressable>
       </View>
     </View>

@@ -412,12 +412,15 @@ export async function getMyStats(
       `SELECT
          (SELECT COUNT(DISTINCT user_id) FROM ratings) AS total_users,
          (
-           SELECT COUNT(DISTINCT user_id)
-           FROM ratings
-           GROUP BY user_id
-           HAVING COUNT(*) > (
-             SELECT COUNT(*) FROM ratings WHERE user_id = ?
-           )
+           SELECT COUNT(*)
+           FROM (
+             SELECT user_id
+             FROM ratings
+             GROUP BY user_id
+             HAVING COUNT(*) > (
+               SELECT COUNT(*) FROM ratings WHERE user_id = ?
+             )
+           ) AS ranked_users
          ) AS users_with_more_films
        FROM dual`,
       [userId],

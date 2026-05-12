@@ -21,6 +21,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import AuthProvider from '@/src/context/AuthContext';
 import { OverlayNavigatorProvider } from '@/src/context/OverlayNavigatorContext';
 import OverlayHost from '@/src/components/shared/OverlayHost';
+import GlobalTabBar from '@/src/components/shared/GlobalTabBar';
 
 const queryClient = new QueryClient();
 
@@ -30,7 +31,7 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: 'index',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -84,9 +85,11 @@ function RootLayoutNav() {
                   <Stack.Screen name="series/[tmdbId]" options={{ headerShown: false }} />
                   <Stack.Screen name="log" options={{ headerShown: false }} />
                   <Stack.Screen name="review/[id]" options={{ headerShown: false }} />
+                  <Stack.Screen name="settings" options={{ headerShown: false }} />
                   <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                 </Stack>
                 <OverlayHost />
+                <GlobalTabBar />
               </OverlayNavigatorProvider>
             </ThemeProvider>
           </AuthProvider>

@@ -1,17 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useSegments } from 'expo-router';
 
 import {
   SwipeBackScreen,
   type SwipeBackScreenHandle,
 } from '@/src/components/shared/SwipeBackScreen';
-import TabBarUI, { TAB_NAMES, type TabName } from '@/src/components/shared/TabBarUI';
+import type { TabName } from '@/src/components/shared/TabBarUI';
 import {
   useInternalOverlayNavigator,
   type OverlayEntry,
 } from '@/src/context/OverlayNavigatorContext';
 import UserProfileOverlay from '@/src/components/profile/UserProfileOverlay';
+import FilmDetailScreen from '@/app/film/[tmdbId]';
+import SeriesDetailScreen from '@/app/series/[tmdbId]';
+import ReviewScreen from '@/app/review/[id]';
 
 function renderOverlayContent(
   entry: OverlayEntry,
@@ -22,11 +25,21 @@ function renderOverlayContent(
       const userId = Number(entry.params.id);
       return <UserProfileOverlay userId={userId} onPressBack={onPressBack} />;
     }
-    case 'film':
-    case 'series':
+    case 'film': {
+      const tmdbId = Number(entry.params.id);
+      return <FilmDetailScreen tmdbId={tmdbId} onPressBack={onPressBack} />;
+    }
+    case 'series': {
+      const tmdbId = Number(entry.params.id);
+      return <SeriesDetailScreen tmdbId={tmdbId} onPressBack={onPressBack} />;
+    }
+    case 'review': {
+      const reviewId = Number(entry.params.id);
+      return <ReviewScreen id={reviewId} onPressBack={onPressBack} />;
+    }
     case 'person':
     case 'list':
-      // Stubs for future detail screens. 
+      // Stubs for future detail screens.
       return null;
     default:
       return null;
@@ -34,84 +47,111 @@ function renderOverlayContent(
 }
 
 /**
- * Renders the currently presented overlay above the tab navigator and
- * supplies its own copy of the floating tab bar so the user can keep
- * navigating between tabs without first dismissing the detail screen.
- *
- * Press behaviour:
- * - Tap the originating tab → slide-out animation, no navigation.
- * - Tap any other tab → slide-out animation, then router.replace to that tab.
- * - Tap the back chevron or swipe from the left edge → slide-out animation,
- *   no navigation (the originating tab is already underneath).
+ * Renders the overlay stack above the tab navigator. The floating tab
+ * bar is owned by `<GlobalTabBar />` in the root layout — this host
+ * only manages the slide animations and stack lifecycle.
  */
 export default function OverlayHost(): React.JSX.Element | null {
-  const { current, _registerDismissHandler, _removeCurrent } =
-    useInternalOverlayNavigator();
+  const {
+    stack,
+    _registerDismissHandler,
+    _removeEntry,
+    _removeAll,
+    _registerTopTrigger,
+    _pendingTargetTabRef,
+  } = useInternalOverlayNavigator();
 
-  if (!current) return null;
+  const segments = useSegments();
+  const isInTabs = segments[0] === '(tabs)';
+
+  if (stack.length === 0 || !isInTabs) return null;
 
   return (
-    <ActiveOverlay
-      key={current.id}
-      entry={current}
-      onAnimationDone={_removeCurrent}
-      registerDismiss={_registerDismissHandler}
-    />
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+      {stack.map((entry, index) => {
+        const isTop = index === stack.length - 1;
+        return (
+          <ActiveOverlay
+            key={entry.id}
+            entry={entry}
+            isTop={isTop}
+            registerDismiss={_registerDismissHandler}
+            registerTopTrigger={_registerTopTrigger}
+            onRemoveSelf={() => _removeEntry(entry.id)}
+            onRemoveAll={_removeAll}
+            pendingTargetTabRef={_pendingTargetTabRef}
+          />
+        );
+      })}
+    </View>
   );
 }
 
 interface ActiveOverlayProps {
   entry: OverlayEntry;
-  onAnimationDone: () => void;
+  isTop: boolean;
   registerDismiss: (
+    id: string,
     handler: ((targetTab?: TabName) => void) | null,
   ) => void;
+  registerTopTrigger: (
+    trigger: ((mode: 'top' | 'all') => void) | null,
+  ) => void;
+  onRemoveSelf: () => void;
+  onRemoveAll: () => void;
+  pendingTargetTabRef: React.MutableRefObject<TabName | null>;
 }
 
 function ActiveOverlay({
   entry,
-  onAnimationDone,
+  isTop,
   registerDismiss,
+  registerTopTrigger,
+  onRemoveSelf,
+  onRemoveAll,
+  pendingTargetTabRef,
 }: ActiveOverlayProps): React.JSX.Element {
   const swipeRef = useRef<SwipeBackScreenHandle>(null);
-  const pendingTargetRef = useRef<TabName | null>(null);
+  const pendingModeRef = useRef<'top' | 'all'>('top');
 
   const handleAnimationDone = useCallback((): void => {
-    const target = pendingTargetRef.current;
-    if (target) {
-      router.replace(`/(tabs)/${target}` as never);
+    const mode = pendingModeRef.current;
+    pendingModeRef.current = 'top';
+    if (mode === 'all') {
+      const target = pendingTargetTabRef.current;
+      pendingTargetTabRef.current = null;
+      if (target) {
+        router.replace(`/(tabs)/${target}` as never);
+      }
+      onRemoveAll();
+    } else {
+      onRemoveSelf();
     }
-    onAnimationDone();
-  }, [onAnimationDone]);
+  }, [onRemoveAll, onRemoveSelf, pendingTargetTabRef]);
 
-  useEffect(() => {
-    registerDismiss((target) => {
-      pendingTargetRef.current = target ?? null;
-      swipeRef.current?.triggerBack();
-    });
-    return () => {
-      registerDismiss(null);
-    };
-  }, [registerDismiss]);
-
-  const handleBackPress = useCallback((): void => {
+  const trigger = useCallback((mode: 'top' | 'all'): void => {
+    pendingModeRef.current = mode;
     swipeRef.current?.triggerBack();
   }, []);
 
-  const handlePressTab = useCallback(
-    (tab: TabName): void => {
-      if (tab !== entry.originTab) {
-        router.replace(`/(tabs)/${tab}` as never);
-      }
-      swipeRef.current?.triggerBack();
-    },
-    [entry.originTab],
-  );
+  useEffect(() => {
+    registerDismiss(entry.id, () => trigger('top'));
+    return () => {
+      registerDismiss(entry.id, null);
+    };
+  }, [registerDismiss, entry.id, trigger]);
 
-  const activeIndex = useMemo(
-    () => TAB_NAMES.indexOf(entry.originTab),
-    [entry.originTab],
-  );
+  useEffect(() => {
+    if (!isTop) return;
+    registerTopTrigger(trigger);
+    return () => {
+      registerTopTrigger(null);
+    };
+  }, [isTop, registerTopTrigger, trigger]);
+
+  const handleBackPress = useCallback((): void => {
+    trigger('top');
+  }, [trigger]);
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
@@ -122,7 +162,6 @@ function ActiveOverlay({
       >
         {renderOverlayContent(entry, handleBackPress)}
       </SwipeBackScreen>
-      <TabBarUI activeIndex={activeIndex} onPressTab={handlePressTab} />
     </View>
   );
 }

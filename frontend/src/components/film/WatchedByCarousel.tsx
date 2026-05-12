@@ -1,10 +1,10 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import StarRating from '@/src/components/home/StarRating';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
+import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
 import type { FilmWatchedByRow } from '@/src/types/film.types';
 
 interface WatchedByCarouselProps {
@@ -16,11 +16,12 @@ export default function WatchedByCarousel({
   rows,
   onPressUser,
 }: WatchedByCarouselProps): React.JSX.Element | null {
+  const overlay = useOverlayNavigator();
   if (rows.length === 0) return null;
 
   const handlePress = (row: FilmWatchedByRow): void => {
     if (row.review_id != null) {
-      router.push(`/review/${row.review_id}`);
+      overlay.present('review', { id: row.review_id });
       return;
     }
     onPressUser(row.user_id);

@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 import { useFilmDetail, useFilmImages } from '@/src/hooks/useFilmDetail';
 import { useFilmActions } from '@/src/hooks/useFilmActions';
+import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
 import FilmHeader from '@/src/components/film/FilmHeader';
 import FilmAboutTab from '@/src/components/film/FilmAboutTab';
 import FilmActionDrawer from '@/src/components/film/FilmActionDrawer';
@@ -20,14 +21,28 @@ import TrailerTab from '@/src/components/film/TrailerTab';
 import PhotosTab from '@/src/components/film/PhotosTab';
 import type { FilmTabKey } from '@/src/components/film/TabPills';
 
+interface FilmDetailScreenProps {
+  /** When provided, used instead of the route's `useLocalSearchParams`. */
+  tmdbId?: number;
+  /** When provided, overrides `router.back()` for the header back chevron. */
+  onPressBack?: () => void;
+}
+
 /**
  * Film detail screen. Composes the header, the active sub-tab (About /
  * Trailer / Photos), and the action drawer.
+ *
+ * Renders both as a route (`/film/[tmdbId]`) and as an overlay layer on top
+ * of presented overlays — in the overlay case `tmdbId` and `onPressBack`
+ * are passed in as props.
  */
-export default function FilmDetailScreen(): React.JSX.Element {
+export default function FilmDetailScreen(
+  { tmdbId: tmdbIdProp, onPressBack }: FilmDetailScreenProps = {},
+): React.JSX.Element {
   const params = useLocalSearchParams<{ tmdbId: string }>();
-  const tmdbIdNum = Number(params.tmdbId);
-  const tmdbId = Number.isFinite(tmdbIdNum) ? tmdbIdNum : undefined;
+  const paramTmdbIdNum = Number(params.tmdbId);
+  const paramTmdbId = Number.isFinite(paramTmdbIdNum) ? paramTmdbIdNum : undefined;
+  const tmdbId = tmdbIdProp ?? paramTmdbId;
 
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<FilmTabKey>('about');
@@ -37,6 +52,10 @@ export default function FilmDetailScreen(): React.JSX.Element {
   const filmQ = useFilmDetail(tmdbId);
   const imagesQ = useFilmImages(tmdbId);
   const actions = useFilmActions(tmdbId ?? 0);
+  const watchlist = useWatchlistToggle(tmdbId ?? 0, 'film', {
+    inWatchlist: filmQ.data?.is_in_watchlist ?? false,
+    watchlistId: filmQ.data?.watchlist_id ?? null,
+  });
 
   if (tmdbId == null) {
     return (
@@ -66,11 +85,7 @@ export default function FilmDetailScreen(): React.JSX.Element {
   const film = filmQ.data;
 
   const handleWatchlist = (): void => {
-    if (film.is_in_watchlist && film.watchlist_id != null) {
-      actions.removeFromWatchlist.mutate(film.watchlist_id);
-    } else {
-      actions.addToWatchlist.mutate();
-    }
+    watchlist.toggle();
   };
 
   const handleToggleLogged = (): void => {
@@ -126,6 +141,8 @@ export default function FilmDetailScreen(): React.JSX.Element {
           images={imagesQ.data}
           topInset={insets.top}
           activeTab={activeTab}
+          isInWatchlist={watchlist.inWatchlist}
+          onPressBack={onPressBack}
           onChangeTab={setActiveTab}
           onPressLog={handleOpenLogFlow}
           onPressWatchlist={handleWatchlist}

@@ -50,13 +50,6 @@ export default function DiscoverScreen() {
     } as never);
   }
 
-  function handleWatchlistPress(_film: TrendingFilm) {
-    // TODO: wire to POST /watchlist once watchlist mutations are implemented.
-  }
-
-  // Director requires an additional per-film credits call — leave null for
-  // now so TrendingCard skips the director line. The trailer key is fetched
-  // per card by `useFilmTrailer`, so we don't need to thread it through here.
   const trendingFilms: TrendingFilm[] = (trendingRaw ?? []).map((f) => ({
     tmdb_id: f.tmdb_id,
     title: f.title,
@@ -124,7 +117,6 @@ export default function DiscoverScreen() {
             films={trendingFilms}
             loading={trendingLoading}
             onCardPress={handleCardPress}
-            onWatchlistPress={handleWatchlistPress}
           />
         </View>
       </ScrollView>

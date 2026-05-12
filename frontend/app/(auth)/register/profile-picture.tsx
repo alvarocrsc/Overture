@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { OnboardingScreen } from '@/src/components/auth/OnboardingScreen';
 import { PrimaryButton } from '@/src/components/auth/PrimaryButton';
 import { useRegister } from '@/src/context/RegisterContext';
+import { useUploadAvatar } from '@/src/hooks/useUploadAvatar';
 import {
   Colors,
   Dimensions,
@@ -20,11 +21,14 @@ const NEXT_ROUTE = '/(auth)/register/favorites' as unknown as Href;
 /**
  * Register step 4 — profile picture.
  * Allows the user to pick a photo from their library or skip.
- * Photo upload to the server is deferred (TODO).
+ * The user is already authenticated at this point (account was created
+ * at the username step), so we upload directly to /users/me/avatar.
  */
 export default function RegisterProfilePictureScreen(): React.JSX.Element {
   const { avatarUri, setAvatarUri } = useRegister();
   const [localUri, setLocalUri] = useState<string | null>(avatarUri);
+  const { mutateAsync: uploadAvatar, isPending: isUploading } =
+    useUploadAvatar();
 
   const handlePickImage = async (): Promise<void> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -49,8 +53,13 @@ export default function RegisterProfilePictureScreen(): React.JSX.Element {
     router.push(NEXT_ROUTE);
   };
 
-  const handleContinue = (): void => {
-    // TODO: upload localUri to the server before navigating
+  const handleContinue = async (): Promise<void> => {
+    if (localUri) {
+      try {
+        await uploadAvatar(localUri);
+      } catch {
+      }
+    }
     router.push(NEXT_ROUTE);
   };
 
@@ -59,8 +68,9 @@ export default function RegisterProfilePictureScreen(): React.JSX.Element {
       currentStep={4}
       totalSteps={5}
       onSkip={handleSkip}
-      onContinue={handleContinue}
-      continueDisabled={!localUri}
+      onContinue={() => void handleContinue()}
+      continueDisabled={!localUri || isUploading}
+      continueLoading={isUploading}
       hideTopBar
     >
       <Text style={styles.heading}>

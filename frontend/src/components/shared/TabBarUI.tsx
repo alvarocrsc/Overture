@@ -4,6 +4,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   useAnimatedStyle,
+  useAnimatedReaction,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +37,7 @@ const ICON_ACTIVE_COLOR = Colors.white;
 const ICON_INACTIVE_COLOR = `rgba(255,255,255,${INACTIVE_OPACITY})`;
 
 function getIndicatorX(index: number, barWidth: number): number {
+  'worklet';
   const groupOffset = (barWidth - NUM_TABS * TAB_SLOT_WIDTH) / 2;
   return groupOffset + index * TAB_SLOT_WIDTH + (TAB_SLOT_WIDTH - INDICATOR_WIDTH) / 2;
 }
@@ -62,12 +64,24 @@ export default function TabBarUI({ activeIndex, onPressTab }: TabBarUIProps): Re
   const { user } = useAuth();
 
   const barWidth = useSharedValue(320);
+  const activeIndexSV = useSharedValue(activeIndex);
   const indicatorX = useSharedValue(getIndicatorX(activeIndex, 320));
 
   useEffect(() => {
-    const target = getIndicatorX(activeIndex, barWidth.value);
-    indicatorX.value = withSpring(target, { damping: 50, stiffness: 350 });
-  }, [activeIndex, barWidth, indicatorX]);
+    activeIndexSV.value = activeIndex;
+  }, [activeIndex, activeIndexSV]);
+
+  useAnimatedReaction(
+    () => activeIndexSV.value,
+    (current, previous) => {
+      if (previous !== null && current !== previous) {
+        indicatorX.value = withSpring(
+          getIndicatorX(current, barWidth.value),
+          { damping: 50, stiffness: 350 },
+        );
+      }
+    },
+  );
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: indicatorX.value }],
@@ -121,7 +135,10 @@ export default function TabBarUI({ activeIndex, onPressTab }: TabBarUIProps): Re
           return (
             <Pressable
               key={name}
-              onPress={() => onPressTab(name, isFocused)}
+              onPressIn={() => {
+                activeIndexSV.value = index;
+                onPressTab(name, isFocused);
+              }}
               style={styles.tabItem}
               accessibilityRole="button"
               accessibilityState={{ selected: isFocused }}

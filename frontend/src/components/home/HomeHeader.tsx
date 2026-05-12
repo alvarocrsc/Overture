@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.heading,
     color: Colors.white,
     letterSpacing: -2,
-    lineHeight: 38,
+    lineHeight: 36,
   },
   bellButton: {
     padding: 4,

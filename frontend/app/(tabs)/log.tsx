@@ -27,6 +27,8 @@ import MediaSearchItem from '@/src/components/log/MediaSearchItem';
 import { useSearch } from '@/src/hooks/useSearch';
 import { useRecentSearches } from '@/src/hooks/useRecentSearches';
 import { useTrending, type TrendingFilmRaw } from '@/src/hooks/useTrending';
+import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
+import { useLoggedStatus } from '@/src/hooks/useLogged';
 import type { FilmSearchResult, SearchResult } from '@/src/types/search.types';
 
 /**
@@ -188,22 +190,18 @@ export default function LogScreen() {
                 <View style={styles.list}>
                   {trending.slice(0, 20).map((film) => {
                     const item = trendingToFilmResult(film);
-                    const goToFilm = (): void => {
-                      router.push({
-                        pathname: '/film/[tmdbId]',
-                        params: { tmdbId: film.tmdb_id.toString() },
-                      } as never);
-                    };
                     return (
-                      <MediaSearchItem
+                      <TrendingMediaRow
                         key={film.tmdb_id}
+                        film={film}
                         item={item}
                         onPress={() => {
                           recordTap(item);
-                          goToFilm();
+                          router.push({
+                            pathname: '/film/[tmdbId]',
+                            params: { tmdbId: film.tmdb_id.toString() },
+                          } as never);
                         }}
-                        onLogPress={goToFilm}
-                        onWatchlistPress={goToFilm}
                       />
                     );
                   })}
@@ -241,6 +239,47 @@ function trendingToFilmResult(film: TrendingFilmRaw): FilmSearchResult {
     year,
     director: film.director ?? null,
   };
+}
+
+function TrendingMediaRow({
+  film,
+  item,
+  onPress,
+}: {
+  film: TrendingFilmRaw;
+  item: FilmSearchResult;
+  onPress: () => void;
+}): React.JSX.Element {
+  const watchlist = useWatchlistToggle(film.tmdb_id, 'film');
+  const isLogged = useLoggedStatus(film.tmdb_id, 'film');
+  const router = useRouter();
+
+  const handleLogPress = (): void => {
+    if (isLogged) return;
+    router.push({
+      pathname: '/log/rating',
+      params: {
+        tmdbId: String(item.tmdbId),
+        mediaType: 'film',
+        title: item.title,
+        year: item.year ?? '',
+        director: item.director ?? '',
+        posterPath: item.posterPath ?? '',
+        backdrops: JSON.stringify([]),
+      },
+    });
+  };
+
+  return (
+    <MediaSearchItem
+      item={item}
+      isLogged={isLogged}
+      isInWatchlist={watchlist.inWatchlist}
+      onPress={onPress}
+      onLogPress={handleLogPress}
+      onWatchlistPress={watchlist.toggle}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

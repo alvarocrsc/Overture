@@ -11,17 +11,23 @@ export default function DiscoverSearchBar({ onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.touchArea, pressed && styles.pressed]}
+      hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }}
     >
-      <View style={styles.iconWrapper}>
-        <Ionicons name="search" size={16} color={Colors.white} />
+      <View style={styles.container}>
+        <View style={styles.iconWrapper}>
+          <Ionicons name="search" size={16} color={Colors.white} />
+        </View>
+        <Text style={styles.placeholder}>Search for movies, TV shows or people</Text>
       </View>
-      <Text style={styles.placeholder}>Search for movies, TV shows or people</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  touchArea: {
+    paddingVertical: 8,
+  },
   container: {
     height: 45,
     borderRadius: Radius.searchBar,
@@ -40,7 +46,7 @@ const styles = StyleSheet.create({
   placeholder: {
     fontFamily: FontFamily.light,
     fontSize: 13,
-    color: Colors.white,
-    letterSpacing: -1,
+    color: 'rgba(255,255,255,0.65)',
+    letterSpacing: -0.5,
   },
 });

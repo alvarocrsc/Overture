@@ -96,14 +96,14 @@ export default function DividesCard({
           {/* Worst rater */}
           <View style={styles.raterGroup}>
             <UserAvatar avatarUrl={worstAvatarUrl} username={worstUsername} size={AVATAR_SIZE} />
-            <FullStarIcon size={12} color={Colors.accentBlue} />
-            <Text style={styles.ratingNumber}>{worstRating.toFixed(1)}</Text>
+            <FullStarIcon size={12} color={Colors.dividesBad} />
+            <Text style={styles.ratingBad}>{worstRating.toFixed(1)}</Text>
           </View>
 
           {/* Best rater */}
           <View style={styles.raterGroup}>
-            <FullStarIcon size={12} color={Colors.accentBlue} />
-            <Text style={styles.ratingNumber}>{bestRating.toFixed(1)}</Text>
+            <FullStarIcon size={12} color={Colors.dividesGood} />
+            <Text style={styles.ratingGood}>{bestRating.toFixed(1)}</Text>
             <UserAvatar avatarUrl={bestAvatarUrl} username={bestUsername} size={AVATAR_SIZE} />
           </View>
         </View>
@@ -197,10 +197,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
   },
-  ratingNumber: {
+  ratingBad: {
     fontFamily: FontFamily.semiBold,
     fontSize: 10,
-    color: Colors.accentBlue,
+    color: Colors.dividesBad,
+  },
+  ratingGood: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 10,
+    color: Colors.dividesGood,
   },
   statRow: {
     flexDirection: 'row',

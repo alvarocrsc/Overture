@@ -40,7 +40,7 @@ export default function FilterPills({ selected, onSelect }: Props) {
               isActive ? styles.pillActive : styles.pillInactive,
               pressed && !isActive && styles.pressed,
             ]}
-            hitSlop={6}
+            hitSlop={10}
           >
             <Text style={styles.label}>{f.label}</Text>
           </Pressable>
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pill: {
-    height: 27,
+    height: 30,
     borderRadius: 25,
     paddingHorizontal: 14,
     justifyContent: 'center',

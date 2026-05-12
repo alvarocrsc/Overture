@@ -32,6 +32,7 @@ import {
 } from '@/src/hooks/useUpdateFavorites';
 import { useUploadAvatar } from '@/src/hooks/useUploadAvatar';
 import { useAuth } from '@/src/context/AuthContext';
+import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
 
 import type { UserProfile, UserFavorite } from '@/src/types/profile.types';
 import type { FilmResult } from '@/src/hooks/useFilms';
@@ -78,6 +79,35 @@ export default function ProfileView({
     userId ?? -1,
     profile?.is_following ?? false,
   );
+
+  const overlay = useOverlayNavigator();
+  const navigateToDetail = (
+    detail:
+      | { kind: 'review'; id: number }
+      | { kind: 'film'; tmdbId: number }
+      | { kind: 'series'; tmdbId: number },
+  ): void => {
+    if (viewingSelf) {
+      if (detail.kind === 'review') {
+        router.push({
+          pathname: '/review/[id]',
+          params: { id: String(detail.id) },
+        });
+      } else {
+        router.push({
+          pathname:
+            detail.kind === 'film' ? '/film/[tmdbId]' : '/series/[tmdbId]',
+          params: { tmdbId: String(detail.tmdbId) },
+        } as never);
+      }
+      return;
+    }
+    if (detail.kind === 'review') {
+      overlay.present('review', { id: detail.id });
+    } else {
+      overlay.present(detail.kind, { id: detail.tmdbId });
+    }
+  };
 
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [targetPosition, setTargetPosition] = useState<number>(1);
@@ -177,6 +207,7 @@ export default function ProfileView({
             ? {
                 onAvatarPress: () => void handleAvatarPress(),
                 isAvatarUploading: isUploadingAvatar,
+                onPressSettings: () => router.push('/settings'),
               }
             : {})}
           {...(onPressBack ? { onPressBack } : {})}
@@ -199,19 +230,14 @@ export default function ProfileView({
               items={recentItems}
               onPressItem={(item) => {
                 if (item.review_id != null) {
-                  router.push({
-                    pathname: '/review/[id]',
-                    params: { id: String(item.review_id) },
-                  });
+                  navigateToDetail({ kind: 'review', id: item.review_id });
                   return;
                 }
-                router.push({
-                  pathname:
-                    item.media_type === 'film'
-                      ? '/film/[tmdbId]'
-                      : '/series/[tmdbId]',
-                  params: { tmdbId: String(item.tmdb_id) },
-                } as never);
+                navigateToDetail(
+                  item.media_type === 'film'
+                    ? { kind: 'film', tmdbId: item.tmdb_id }
+                    : { kind: 'series', tmdbId: item.tmdb_id },
+                );
               }}
             />
           </>

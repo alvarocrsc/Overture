@@ -16,7 +16,7 @@ import { DividesCarousel } from '@/src/components/home/DividesCarousel';
 
 import { useNewFilms, useNewSeries } from '@/src/hooks/useNewReleases';
 import { useFriendsActivity } from '@/src/hooks/useFriendsActivity';
-import { MOCK_DIVIDES } from '@/src/data/homeMockData';
+import { useDivides } from '@/src/hooks/useDivides';
 
 // Placeholder backdrop from TMDB
 const PLACEHOLDER_BACKDROP = backdropUrl('/8EmbaG1ydsmMakFWwD0MeEudAgz.jpg', 'w1280');
@@ -30,6 +30,9 @@ export default function HomeScreen() {
   const { data: newFilms } = useNewFilms();
   const { data: newSeries } = useNewSeries();
   const { data: friendsActivity } = useFriendsActivity(
+    activeTab === 'films' ? 'film' : 'series',
+  );
+  const { data: divides } = useDivides(
     activeTab === 'films' ? 'film' : 'series',
   );
 
@@ -48,7 +51,7 @@ export default function HomeScreen() {
     reviewId: number | null,
   ): void => {
     if (reviewId != null) {
-      router.push({ pathname: '/review/[id]', params: { id: String(reviewId) } } as never);
+      overlay.present('review', { id: reviewId });
       return;
     }
     router.push({
@@ -131,15 +134,17 @@ export default function HomeScreen() {
         </View>
 
         {/* ── Divides Your Friends ── */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Divides your friends"
-            titleAccent="your friends"
-            subtitle="Films your circle can't agree on."
-            onSeeAll={() => {}}
-          />
-          <DividesCarousel items={MOCK_DIVIDES} />
-        </View>
+        {divides && divides.length >= 1 && (
+          <View style={styles.section}>
+            <SectionHeader
+              title="Divides your friends"
+              titleAccent="your friends"
+              subtitle="Films your circle can't agree on."
+              onSeeAll={() => {}}
+            />
+            <DividesCarousel items={divides} />
+          </View>
+        )}
       </ScrollView>
     </View>
   );

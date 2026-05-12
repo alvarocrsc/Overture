@@ -12,7 +12,7 @@ import { runOnJS } from 'react-native-worklets';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import DividesCard from './DividesCard';
 import { posterUrl } from '@/src/lib/tmdb';
-import type { DividesEntry } from '@/src/data/homeMockData';
+import type { DividesRow } from '@/src/hooks/useDivides';
 
 const CARD_WIDTH = 250;      
 const CARD_HEIGHT = 169;     
@@ -33,21 +33,35 @@ const SWIPE_THRESHOLD = 50;
 const CARD_BORDER_RADIUS = 10;
 const ANIMATION_DURATION = 340;
 interface DividesCarouselProps {
-  items: DividesEntry[];
+  items: DividesRow[];
 }
 
 function wrapIndex(i: number, total: number): number {
   return ((i % total) + total) % total;
 }
 
+function toCardProps(item: DividesRow) {
+  return {
+    posterPath: item.poster_path,
+    title: item.title,
+    negativePercent: item.negative_percent,
+    positivePercent: item.positive_percent,
+    worstRating: item.worst_rating,
+    bestRating: item.best_rating,
+    worstAvatarUrl: item.worst_avatar_url,
+    bestAvatarUrl: item.best_avatar_url,
+    worstUsername: item.worst_username,
+    bestUsername: item.best_username,
+    friendCount: item.friend_count,
+    ratingSpread: item.rating_spread,
+  };
+}
+
 /**
  * Stacked deck carousel for the "Divides your friends" section.
  *
  * Three cards are always visible: the front card as a full DividesCard, and
- * two poster-only peeks behind it. On swipe-left the front card shrinks to
- * its poster column and slides off-screen; simultaneously peek-1 expands to
- * full width and slides into the front slot, peek-2 moves into the peek-1
- * slot, and a new card fades in at the peek-2 position.
+ * two poster-only peeks behind it. 
  */
 export function DividesCarousel({ items }: DividesCarouselProps): React.JSX.Element {
   const { width: screenWidth } = useWindowDimensions();
@@ -62,11 +76,9 @@ export function DividesCarousel({ items }: DividesCarouselProps): React.JSX.Elem
   const peek2Item = items[wrapIndex(activeIndex + 2, total)];
   const peek3Item = items[wrapIndex(activeIndex + 3, total)];
 
-  // Prefetch all poster images once so source swaps after commit hit memory cache
-  // and never trigger a placeholder flash.
   useEffect(() => {
     const urls = items
-      .map((it) => posterUrl(it.posterPath, 'w185'))
+      .map((it) => posterUrl(it.poster_path, 'w185'))
       .filter((u): u is string => Boolean(u));
     if (urls.length > 0) {
       Image.prefetch(urls, 'memory-disk');
@@ -138,8 +150,8 @@ export function DividesCarousel({ items }: DividesCarouselProps): React.JSX.Elem
     };
   });
 
-  const uri2 = posterUrl(peek2Item.posterPath, 'w185');
-  const uri3 = posterUrl(peek3Item.posterPath, 'w185');
+  const uri2 = posterUrl(peek2Item.poster_path, 'w185');
+  const uri3 = posterUrl(peek3Item.poster_path, 'w185');
 
   return (
     <View style={styles.container}>
@@ -175,13 +187,13 @@ export function DividesCarousel({ items }: DividesCarouselProps): React.JSX.Elem
       {/* ── Peek-1 (tap to advance, expands to become next front card) ── */}
       <GestureDetector gesture={tapGesture}>
         <Animated.View style={[styles.cardWrapper, peek1Style]}>
-          <DividesCard {...peek1Item} onSeeDebate={() => {}} />
+          <DividesCard {...toCardProps(peek1Item)} onSeeDebate={() => {}} />
         </Animated.View>
       </GestureDetector>
 
       {/* ── Front card (shrinks to poster and slides left) ───────────── */}
       <Animated.View style={[styles.cardWrapper, styles.frontCard, frontStyle]}>
-        <DividesCard {...frontItem} onSeeDebate={() => {}} />
+        <DividesCard {...toCardProps(frontItem)} onSeeDebate={() => {}} />
         <Animated.View
           pointerEvents="none"
           style={[styles.frontMask, frontContentMaskStyle]}

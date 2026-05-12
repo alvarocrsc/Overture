@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
     letterSpacing: LetterSpacing.tight,
     textAlign: 'center',
-    marginTop: 32,
+    marginTop: 80,
   },
   subtitle: {
     fontFamily: FontFamily.regular,

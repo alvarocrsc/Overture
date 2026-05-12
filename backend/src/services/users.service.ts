@@ -531,6 +531,184 @@ export async function getFriendsActivity(
 }
 
 // ---------------------------------------------------------------------------
+// Divides your friends
+// ---------------------------------------------------------------------------
+
+/** A single row in the Home → Divides Your Friends carousel. */
+export interface DividesRow {
+  /** Film or series id used as a stable key in the frontend list. */
+  id: number;
+  /** TMDB id of the film or series. */
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  /** Discriminator used by the frontend. */
+  media_type: 'film' | 'series';
+  /** Number of followed users who rated it. */
+  friend_count: number;
+  /** Lowest star rating given by a followed user. */
+  worst_rating: number;
+  /** Highest star rating given by a followed user. */
+  best_rating: number;
+  /** best_rating - worst_rating. */
+  rating_spread: number;
+  /** Fraction of followed users who rated it >= 3.5 (0–1). */
+  positive_percent: number;
+  /** Fraction of followed users who rated it <= 2.5 (0–1). */
+  negative_percent: number;
+  /** Username of the followed user who gave the lowest rating. */
+  worst_username: string;
+  worst_avatar_url: string | null;
+  /** Username of the followed user who gave the highest rating. */
+  best_username: string;
+  best_avatar_url: string | null;
+}
+
+interface DividesAggregateRow {
+  content_id: number;
+  tmdb_id: number;
+  title: string;
+  poster_path: string | null;
+  friend_count: number;
+  worst_rating: string;
+  best_rating: string;
+  positive_count: number;
+  negative_count: number;
+}
+
+interface DividesExtremeRaterRow {
+  content_id: number;
+  value: string;
+  username: string;
+  avatar_url: string | null;
+}
+
+/**
+ * Returns films or series whose ratings have the highest spread among the
+ * viewer's followed users. Powers the Home → Divides Your Friends carousel.
+ *
+ * Selection criteria: at least 2 followed users rated the title, and the
+ * spread between best and worst rating is at least 1.5 stars. Results are
+ * ordered by spread (desc) then friend count (desc).
+ *
+ * @param viewerId The currently authenticated user.
+ * @param type     'film' for film ratings, 'series' for series ratings.
+ * @param limit    Maximum number of rows to return. Defaults to 10.
+ */
+export async function getDividesYourFriends(
+  viewerId: number,
+  type: 'film' | 'series',
+  limit = 10,
+): Promise<DividesRow[]> {
+  const clampedLimit = Math.min(Math.max(limit, 1), 20);
+  const isFilm = type === 'film';
+  const contentTable = isFilm ? 'films' : 'series';
+  const contentFk = isFilm ? 'film_id' : 'series_id';
+
+  const aggregateRows = await query<DividesAggregateRow>(
+    `SELECT
+       c.id                                                  AS content_id,
+       c.tmdb_id,
+       c.title,
+       c.poster_path,
+       COUNT(DISTINCT r.user_id)                             AS friend_count,
+       MIN(r.value)                                          AS worst_rating,
+       MAX(r.value)                                          AS best_rating,
+       SUM(CASE WHEN r.value >= 3.5 THEN 1 ELSE 0 END)       AS positive_count,
+       SUM(CASE WHEN r.value <= 2.5 THEN 1 ELSE 0 END)       AS negative_count
+     FROM ratings r
+     JOIN ${contentTable} c ON c.id = r.${contentFk}
+     WHERE r.${contentFk} IS NOT NULL
+       AND r.user_id IN (
+         SELECT following_id FROM follows WHERE follower_id = ?
+       )
+     GROUP BY c.id, c.tmdb_id, c.title, c.poster_path
+     HAVING friend_count >= 2 AND (MAX(r.value) - MIN(r.value)) >= 1.5
+     ORDER BY (MAX(r.value) - MIN(r.value)) DESC, friend_count DESC
+     LIMIT ${clampedLimit}`,
+    [viewerId],
+  );
+
+  if (aggregateRows.length === 0) return [];
+
+  const contentIds = aggregateRows.map((r) => r.content_id);
+  const placeholders = contentIds.map(() => '?').join(',');
+
+  const [bestRaters, worstRaters] = await Promise.all([
+    query<DividesExtremeRaterRow>(
+      `SELECT r.${contentFk} AS content_id, r.value, u.username, u.avatar_url
+       FROM ratings r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.${contentFk} IN (${placeholders})
+         AND r.user_id IN (
+           SELECT following_id FROM follows WHERE follower_id = ?
+         )
+         AND r.id = (
+           SELECT r2.id FROM ratings r2
+           WHERE r2.${contentFk} = r.${contentFk}
+             AND r2.user_id IN (
+               SELECT following_id FROM follows WHERE follower_id = ?
+             )
+           ORDER BY r2.value DESC, r2.created_at DESC
+           LIMIT 1
+         )`,
+      [...contentIds, viewerId, viewerId],
+    ),
+    query<DividesExtremeRaterRow>(
+      `SELECT r.${contentFk} AS content_id, r.value, u.username, u.avatar_url
+       FROM ratings r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.${contentFk} IN (${placeholders})
+         AND r.user_id IN (
+           SELECT following_id FROM follows WHERE follower_id = ?
+         )
+         AND r.id = (
+           SELECT r2.id FROM ratings r2
+           WHERE r2.${contentFk} = r.${contentFk}
+             AND r2.user_id IN (
+               SELECT following_id FROM follows WHERE follower_id = ?
+             )
+           ORDER BY r2.value ASC, r2.created_at DESC
+           LIMIT 1
+         )`,
+      [...contentIds, viewerId, viewerId],
+    ),
+  ]);
+
+  const bestByContentId = new Map<number, DividesExtremeRaterRow>();
+  for (const row of bestRaters) bestByContentId.set(row.content_id, row);
+  const worstByContentId = new Map<number, DividesExtremeRaterRow>();
+  for (const row of worstRaters) worstByContentId.set(row.content_id, row);
+
+  return aggregateRows.map<DividesRow>((r) => {
+    const best = bestByContentId.get(r.content_id);
+    const worst = worstByContentId.get(r.content_id);
+    const bestVal = Number(r.best_rating);
+    const worstVal = Number(r.worst_rating);
+    const friendCount = Number(r.friend_count);
+    return {
+      id: r.content_id,
+      tmdb_id: r.tmdb_id,
+      title: r.title,
+      poster_path: r.poster_path,
+      media_type: type,
+      friend_count: friendCount,
+      worst_rating: worstVal,
+      best_rating: bestVal,
+      rating_spread: Number((bestVal - worstVal).toFixed(2)),
+      positive_percent:
+        friendCount > 0 ? Number(r.positive_count) / friendCount : 0,
+      negative_percent:
+        friendCount > 0 ? Number(r.negative_count) / friendCount : 0,
+      worst_username: worst?.username ?? '',
+      worst_avatar_url: worst?.avatar_url ?? null,
+      best_username: best?.username ?? '',
+      best_avatar_url: best?.avatar_url ?? null,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Avatar upload
 // ---------------------------------------------------------------------------
 

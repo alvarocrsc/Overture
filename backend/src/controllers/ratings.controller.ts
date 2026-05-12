@@ -42,6 +42,13 @@ export async function deleteRating(req: Request, res: Response): Promise<void> {
   res.status(200).json({ message: 'Log deleted' });
 }
 
+/** GET /api/v1/ratings/me/logged */
+export async function getLoggedMembership(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const data = await ratingsService.getLoggedMembership(userId);
+  res.status(200).json({ data });
+}
+
 /** GET /api/v1/ratings/user/:userId */
 export async function getRatingsByUser(req: Request, res: Response): Promise<void> {
   const userId = parseId(String(req.params['userId']), 'user ID');

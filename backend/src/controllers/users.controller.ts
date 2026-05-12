@@ -94,6 +94,15 @@ export async function getMyFriendsActivity(req: Request, res: Response): Promise
   res.status(200).json({ data });
 }
 
+/** GET /api/v1/users/me/divides?type=film|series */
+export async function getMyDivides(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const rawType = req.query['type'];
+  const type = rawType === 'series' ? 'series' : 'film';
+  const data = await usersService.getDividesYourFriends(userId, type);
+  res.status(200).json({ data });
+}
+
 /** POST /api/v1/users/me/avatar (multipart/form-data, field: `avatar`) */
 export async function uploadAvatar(req: Request, res: Response): Promise<void> {
   const userId = req.user!.userId;

@@ -11,6 +11,7 @@ import {
   updateMyFavorites,
   getUserFavoritesById,
   getMyFriendsActivity,
+  getMyDivides,
   uploadAvatar,
 } from '../controllers/users.controller';
 import { verifyAccessToken, optionalAccessToken } from '../middleware/auth';
@@ -39,6 +40,7 @@ router.put(
   updateMyFavorites,
 );
 router.get('/me/friends-activity', verifyAccessToken, getMyFriendsActivity);
+router.get('/me/divides', verifyAccessToken, getMyDivides);
 
 router.get('/:id', optionalAccessToken, getUserById);
 router.get('/:id/favorites', getUserFavoritesById);

@@ -146,6 +146,16 @@ export async function createRating(
   const ratingId = ratingInsert.insertId;
   let reviewId: number | null = null;
 
+  // Logging a title implies it has been watched — remove any matching
+  // watchlist entry so the user doesn't see it queued anymore.
+  await execute(
+    `DELETE FROM watchlist
+       WHERE user_id = ?
+         AND ((film_id IS NOT NULL AND film_id = ?)
+           OR (series_id IS NOT NULL AND series_id = ?))`,
+    [userId, internalFilmId, internalSeriesId],
+  );
+
   if (data.review) {
     const reviewInsert = await execute(
       `INSERT INTO reviews (rating_id, user_id, body, contains_spoilers, liked_title)
@@ -325,6 +335,48 @@ export async function deleteRating(ratingId: number, userId: number): Promise<vo
   }
 
   await execute(`DELETE FROM ratings WHERE id = ?`, [ratingId]);
+}
+
+export interface LoggedMembershipRow {
+  tmdb_id: number;
+  media_type: 'film' | 'series';
+}
+
+/**
+ * Returns a lightweight list of every (tmdb_id, media_type) the user has
+ * logged at least once. Used as the single source of truth for the
+ * "logged" tick icon across search, recents and trending surfaces.
+ *
+ * @param userId - The authenticated user's id.
+ */
+export async function getLoggedMembership(
+  userId: number,
+): Promise<LoggedMembershipRow[]> {
+  const rows = await query<{
+    film_tmdb_id: number | null;
+    series_tmdb_id: number | null;
+  }>(
+    `SELECT DISTINCT
+            f.tmdb_id AS film_tmdb_id,
+            s.tmdb_id AS series_tmdb_id
+       FROM ratings r
+       LEFT JOIN films  f ON r.film_id   = f.id
+       LEFT JOIN series s ON r.series_id = s.id
+      WHERE r.user_id = ?`,
+    [userId],
+  );
+
+  return rows
+    .map<LoggedMembershipRow | null>((r) => {
+      if (r.film_tmdb_id != null) {
+        return { tmdb_id: r.film_tmdb_id, media_type: 'film' };
+      }
+      if (r.series_tmdb_id != null) {
+        return { tmdb_id: r.series_tmdb_id, media_type: 'series' };
+      }
+      return null;
+    })
+    .filter((r): r is LoggedMembershipRow => r !== null);
 }
 
 /** Options for getRatingsByUser. */

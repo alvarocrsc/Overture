@@ -165,6 +165,55 @@ export async function addToWatchlist(
   }
 }
 
+/** A single row of the user's watchlist membership lookup table. */
+export interface WatchlistMembershipRow {
+  /** Internal watchlist row id (used for DELETE). */
+  id: number;
+  /** TMDB id of the film or series. */
+  tmdb_id: number;
+  /** Discriminator for the kind of title. */
+  media_type: 'film' | 'series';
+}
+
+/**
+ * Returns a lightweight list of every (tmdb_id, media_type) the user has on
+ * their watchlist, paired with the internal watchlist row id required for
+ * DELETE. Used as the single source of truth for client-side membership
+ * checks across screens (detail, trending, search, recents).
+ *
+ * @param userId - The authenticated user's id.
+ */
+export async function getWatchlistMembership(
+  userId: number,
+): Promise<WatchlistMembershipRow[]> {
+  const rows = await query<{
+    id: number;
+    film_tmdb_id: number | null;
+    series_tmdb_id: number | null;
+  }>(
+    `SELECT w.id,
+            f.tmdb_id AS film_tmdb_id,
+            s.tmdb_id AS series_tmdb_id
+       FROM watchlist w
+       LEFT JOIN films  f ON w.film_id   = f.id
+       LEFT JOIN series s ON w.series_id = s.id
+      WHERE w.user_id = ?`,
+    [userId],
+  );
+
+  return rows
+    .map<WatchlistMembershipRow | null>((r) => {
+      if (r.film_tmdb_id != null) {
+        return { id: r.id, tmdb_id: r.film_tmdb_id, media_type: 'film' };
+      }
+      if (r.series_tmdb_id != null) {
+        return { id: r.id, tmdb_id: r.series_tmdb_id, media_type: 'series' };
+      }
+      return null;
+    })
+    .filter((r): r is WatchlistMembershipRow => r !== null);
+}
+
 /**
  * Removes an entry from the authenticated user's watchlist.
  * @param watchlistId - The watchlist entry's primary key.

@@ -69,6 +69,16 @@ api.interceptors.response.use(
       config._retry = true;
 
       if (!refreshPromise) {
+        // If there's no stored token at all, the user is already signed out.
+        // Don't try to refresh and don't navigate — the auth gate (index.tsx)
+        // owns the unauthenticated routing. This prevents (tabs) screens
+        // mounting at launch from hijacking navigation to /login when the
+        // user should land on /welcome.
+        const existingToken = await getToken();
+        if (!existingToken) {
+          return Promise.reject(error);
+        }
+
         refreshPromise = refreshAxios
           .post<{ data: { accessToken: string } }>('/auth/refresh-token')
           .then(async (res) => {

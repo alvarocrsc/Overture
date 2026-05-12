@@ -28,6 +28,13 @@ export async function addToWatchlist(req: Request, res: Response): Promise<void>
   res.status(201).json({ data: result, message: 'Added to watchlist' });
 }
 
+/** GET /api/v1/watchlist/membership */
+export async function getWatchlistMembership(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const data = await watchlistService.getWatchlistMembership(userId);
+  res.status(200).json({ data });
+}
+
 /** DELETE /api/v1/watchlist/:id */
 export async function deleteFromWatchlist(req: Request, res: Response): Promise<void> {
   const watchlistId = Number(req.params['id']);

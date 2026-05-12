@@ -103,11 +103,15 @@ export default function LogDetailsScreen(): React.JSX.Element {
           : ['series', log.tmdbId];
       queryClient.invalidateQueries({ queryKey });
       queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      queryClient.invalidateQueries({ queryKey: ['watchlist', 'membership'] });
+      queryClient.invalidateQueries({ queryKey: ['logged', 'membership'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
       queryClient.invalidateQueries({ queryKey: ['recent-activity'] });
       queryClient.invalidateQueries({ queryKey: ['ratings'] });
+      queryClient.invalidateQueries({ queryKey: ['rating-distribution'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['friends-activity'] });
+      queryClient.invalidateQueries({ queryKey: ['divides'] });
 
       log.reset();
       if (data.review_id != null) {

@@ -45,14 +45,14 @@ export default function StatsScreen(): React.JSX.Element {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>Your Stats</Text>
         <Pressable
           onPress={() => {}}
           hitSlop={12}
           style={({ pressed }) => [styles.bell, pressed && { opacity: 0.7 }]}
         >
-          <Ionicons name="notifications-outline" size={20} color={Colors.white} />
+          <Ionicons name="notifications-outline" size={22} color={Colors.white} />
         </Pressable>
       </View>
 
@@ -131,9 +131,10 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: FontFamily.black,
-    fontSize: FontSize.heading,
+    fontSize: 32,
     color: Colors.white,
-    letterSpacing: -1,
+    letterSpacing: -2,
+    lineHeight: 36,
   },
   bell: {
     padding: 4,

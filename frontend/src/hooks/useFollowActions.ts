@@ -44,6 +44,7 @@ export function useFollowActions(
         queryClient.invalidateQueries({ queryKey: ['profile', targetUserId] }),
         queryClient.invalidateQueries({ queryKey: ['profile', 'me'] }),
         queryClient.invalidateQueries({ queryKey: ['friends-activity'] }),
+        queryClient.invalidateQueries({ queryKey: ['divides'] }),
       ]);
     } catch {
       setIsFollowing(!next);

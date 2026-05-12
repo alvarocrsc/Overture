@@ -21,10 +21,12 @@ interface SeriesHeaderProps {
   creator: string | null;
   topInset: number;
   activeTab: FilmTabKey;
+  isInWatchlist: boolean;
   onChangeTab: (tab: FilmTabKey) => void;
   onPressLog: () => void;
   onPressWatchlist: () => void;
   onPressMore: () => void;
+  onPressBack?: () => void;
 }
 
 const HEADER_HEIGHT = 386;
@@ -35,10 +37,12 @@ export default function SeriesHeader({
   creator,
   topInset,
   activeTab,
+  isInWatchlist,
   onChangeTab,
   onPressLog,
   onPressWatchlist,
   onPressMore,
+  onPressBack,
 }: SeriesHeaderProps): React.JSX.Element {
   const backdropPath = series.custom_backdrop_path ?? series.backdrop_path;
   const posterPath = series.custom_poster_path ?? series.poster_path;
@@ -59,7 +63,7 @@ export default function SeriesHeader({
     seasons != null ? `${seasons} ${seasons === 1 ? 'season' : 'seasons'}` : null;
 
   const logLabel = series.is_logged ? 'Log again' : 'Log';
-  const watchlistLabel = series.is_in_watchlist ? 'Remove' : 'Add to watchlist';
+  const watchlistLabel = isInWatchlist ? 'Remove' : 'Add to watchlist';
 
   return (
     <View style={styles.container}>
@@ -77,7 +81,7 @@ export default function SeriesHeader({
 
       <View style={[styles.topRow, { top: topInset + 16 }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={onPressBack ?? (() => router.back())}
           hitSlop={12}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
           accessibilityRole="button"
@@ -132,7 +136,7 @@ export default function SeriesHeader({
           onPress={onPressLog}
         />
         <ActionPill
-          icon={series.is_in_watchlist ? 'bookmark' : 'bookmark-outline'}
+          icon={isInWatchlist ? 'bookmark' : 'bookmark-outline'}
           label={watchlistLabel}
           onPress={onPressWatchlist}
         />

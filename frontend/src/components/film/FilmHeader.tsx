@@ -20,10 +20,12 @@ interface FilmHeaderProps {
   images: FilmImages | undefined;
   topInset: number;
   activeTab: FilmTabKey;
+  isInWatchlist: boolean;
   onChangeTab: (tab: FilmTabKey) => void;
   onPressLog: () => void;
   onPressWatchlist: () => void;
   onPressMore: () => void;
+  onPressBack?: () => void;
 }
 
 const HEADER_HEIGHT = 386;
@@ -33,10 +35,12 @@ export default function FilmHeader({
   images,
   topInset,
   activeTab,
+  isInWatchlist,
   onChangeTab,
   onPressLog,
   onPressWatchlist,
   onPressMore,
+  onPressBack,
 }: FilmHeaderProps): React.JSX.Element {
   const backdropPath = film.custom_backdrop_path ?? film.backdrop_path;
   const posterPath = film.custom_poster_path ?? film.poster_path;
@@ -56,7 +60,7 @@ export default function FilmHeader({
   const runtime = film.runtime_min;
 
   const logLabel = film.is_logged ? 'Log again' : 'Log';
-  const watchlistLabel = film.is_in_watchlist ? 'Remove' : 'Add to watchlist';
+  const watchlistLabel = isInWatchlist ? 'Remove' : 'Add to watchlist';
 
   return (
     <View style={styles.container}>
@@ -75,7 +79,7 @@ export default function FilmHeader({
       {/* Top nav row */}
       <View style={[styles.topRow, { top: topInset + 16 }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={onPressBack ?? (() => router.back())}
           hitSlop={12}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
           accessibilityRole="button"
@@ -135,7 +139,7 @@ export default function FilmHeader({
           onPress={onPressLog}
         />
         <ActionPill
-          icon={film.is_in_watchlist ? 'bookmark' : 'bookmark-outline'}
+          icon={isInWatchlist ? 'bookmark' : 'bookmark-outline'}
           label={watchlistLabel}
           onPress={onPressWatchlist}
         />

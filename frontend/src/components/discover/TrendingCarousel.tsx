@@ -13,7 +13,6 @@ interface Props {
   films: TrendingFilm[];
   loading?: boolean;
   onCardPress: (film: TrendingFilm) => void;
-  onWatchlistPress: (film: TrendingFilm) => void;
 }
 
 const CARD_WIDTH = 350;
@@ -25,7 +24,6 @@ export default function TrendingCarousel({
   films,
   loading = false,
   onCardPress,
-  onWatchlistPress,
 }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [muted, setMuted] = useState(true);
@@ -92,7 +90,6 @@ export default function TrendingCarousel({
             muted={muted}
             onToggleMute={toggleMute}
             onPress={() => onCardPress(film)}
-            onWatchlistPress={() => onWatchlistPress(film)}
           />
         </View>
       ))}

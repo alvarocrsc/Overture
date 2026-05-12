@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
+  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -30,39 +31,51 @@ export default function LogSearchBar({
   autoFocus,
   inputRef,
 }: Props) {
+  const internalRef = useRef<TextInputType>(null);
+  const resolvedRef = inputRef ?? internalRef;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.iconWrapper}>
-        <Ionicons name="search" size={16} color={Colors.white} />
-      </View>
-      <TextInput
-        ref={inputRef}
-        value={value}
-        onChangeText={onChangeText}
-        onFocus={onFocus}
-        autoFocus={autoFocus}
-        placeholder="Search for movies, TV shows or people"
-        placeholderTextColor="rgba(255,255,255,0.65)"
-        style={styles.input}
-        returnKeyType="search"
-        autoCorrect={false}
-        autoCapitalize="none"
-      />
-      {value.length > 0 && (
-        <Ionicons
-          name="close"
-          size={18}
-          color={Colors.white}
-          onPress={onClear}
-          suppressHighlighting
-          style={styles.clearIcon}
+    <Pressable
+      style={styles.touchArea}
+      onPress={() => resolvedRef.current?.focus()}
+      hitSlop={{ top: 10, bottom: 10, left: 0, right: 0 }}
+    >
+      <View style={styles.container}>
+        <View style={styles.iconWrapper}>
+          <Ionicons name="search" size={16} color={Colors.white} />
+        </View>
+        <TextInput
+          ref={resolvedRef}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={onFocus}
+          autoFocus={autoFocus}
+          placeholder="Search for movies, TV shows or people"
+          placeholderTextColor="rgba(255,255,255,0.65)"
+          style={styles.input}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
         />
-      )}
-    </View>
+        {value.length > 0 && (
+          <Ionicons
+            name="close"
+            size={18}
+            color={Colors.white}
+            onPress={onClear}
+            suppressHighlighting
+            style={styles.clearIcon}
+          />
+        )}
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  touchArea: {
+    paddingVertical: 8,
+  },
   container: {
     height: 45,
     borderRadius: Radius.searchBar,

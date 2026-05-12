@@ -34,12 +34,16 @@ export function useSeriesActions(tmdbId: number) {
     qc.invalidateQueries({ queryKey: ['films'] });
     qc.invalidateQueries({ queryKey: ['trending'] });
     qc.invalidateQueries({ queryKey: ['watchlist'] });
+    qc.invalidateQueries({ queryKey: ['watchlist', 'membership'] });
+    qc.invalidateQueries({ queryKey: ['logged', 'membership'] });
     qc.invalidateQueries({ queryKey: ['profile'] });
     qc.invalidateQueries({ queryKey: ['user-favorites'] });
     qc.invalidateQueries({ queryKey: ['ratings'] });
     qc.invalidateQueries({ queryKey: ['stats'] });
+    qc.invalidateQueries({ queryKey: ['rating-distribution'] });
     qc.invalidateQueries({ queryKey: ['search'] });
     qc.invalidateQueries({ queryKey: ['friends-activity'] });
+    qc.invalidateQueries({ queryKey: ['divides'] });
     qc.invalidateQueries({ queryKey: ['recent-activity'] });
   };
 
@@ -53,20 +57,6 @@ export function useSeriesActions(tmdbId: number) {
   const removeLog = useMutation({
     mutationFn: async (ratingId: number): Promise<void> => {
       await api.delete(`/ratings/${ratingId}`);
-    },
-    onSuccess: invalidateAll,
-  });
-
-  const addToWatchlist = useMutation({
-    mutationFn: async (): Promise<void> => {
-      await api.post('/watchlist', { tmdb_id: tmdbId, type: 'series' });
-    },
-    onSuccess: invalidateAll,
-  });
-
-  const removeFromWatchlist = useMutation({
-    mutationFn: async (watchlistId: number): Promise<void> => {
-      await api.delete(`/watchlist/${watchlistId}`);
     },
     onSuccess: invalidateAll,
   });
@@ -98,7 +88,6 @@ export function useSeriesActions(tmdbId: number) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: seriesKeys.detail(tmdbId) });
       qc.invalidateQueries({ queryKey: seriesKeys.displayPrefs(tmdbId) });
-      // Custom poster / backdrop affects every listing that renders this series.
       qc.invalidateQueries({ queryKey: ['series'] });
       qc.invalidateQueries({ queryKey: ['trending'] });
       qc.invalidateQueries({ queryKey: ['watchlist'] });
@@ -107,6 +96,7 @@ export function useSeriesActions(tmdbId: number) {
       qc.invalidateQueries({ queryKey: ['ratings'] });
       qc.invalidateQueries({ queryKey: ['search'] });
       qc.invalidateQueries({ queryKey: ['friends-activity'] });
+      qc.invalidateQueries({ queryKey: ['divides'] });
       qc.invalidateQueries({ queryKey: ['recent-activity'] });
     },
   });
@@ -114,8 +104,6 @@ export function useSeriesActions(tmdbId: number) {
   return {
     logSeries,
     removeLog,
-    addToWatchlist,
-    removeFromWatchlist,
     likeSeries,
     unlikeSeries,
     updateDisplayPrefs,

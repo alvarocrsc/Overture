@@ -1,6 +1,14 @@
 import React from 'react';
-import type { MemberSearchResult, SearchResult } from '@/src/types/search.types';
+import { router } from 'expo-router';
+import type {
+  FilmSearchResult,
+  MemberSearchResult,
+  SearchResult,
+  SeriesSearchResult,
+} from '@/src/types/search.types';
 import { useFollowActions } from '@/src/hooks/useFollowActions';
+import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
+import { useLoggedStatus } from '@/src/hooks/useLogged';
 import { useAuth } from '@/src/context/AuthContext';
 import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
 import MediaSearchItem from './MediaSearchItem';
@@ -46,17 +54,58 @@ function MemberResultRow({
   );
 }
 
+function MediaResultRow({
+  result,
+  onPress,
+  onRemove,
+}: {
+  result: FilmSearchResult | SeriesSearchResult;
+  onPress: () => void;
+  onRemove?: () => void;
+}) {
+  const watchlist = useWatchlistToggle(result.tmdbId, result.type);
+  const isLogged = useLoggedStatus(result.tmdbId, result.type);
+
+  const handleLogPress = (): void => {
+    if (isLogged) return;
+    const creator =
+      result.type === 'film' ? result.director : result.creator;
+    router.push({
+      pathname: '/log/rating',
+      params: {
+        tmdbId: String(result.tmdbId),
+        mediaType: result.type,
+        title: result.title,
+        year: result.year ?? '',
+        director: creator ?? '',
+        posterPath: result.posterPath ?? '',
+        backdrops: JSON.stringify([]),
+      },
+    });
+  };
+
+  return (
+    <MediaSearchItem
+      item={result}
+      isLogged={isLogged}
+      isInWatchlist={watchlist.inWatchlist}
+      onPress={onPress}
+      onLogPress={handleLogPress}
+      onWatchlistPress={watchlist.toggle}
+      {...(onRemove ? { onRemove } : {})}
+    />
+  );
+}
+
 export default function SearchResultItem({ result, onPress, onRemove }: Props) {
   const handlePress = onPress ?? (() => {});
   switch (result.type) {
     case 'film':
     case 'series':
       return (
-        <MediaSearchItem
-          item={result}
+        <MediaResultRow
+          result={result}
           onPress={handlePress}
-          onLogPress={() => {}}
-          onWatchlistPress={() => {}}
           {...(onRemove ? { onRemove } : {})}
         />
       );

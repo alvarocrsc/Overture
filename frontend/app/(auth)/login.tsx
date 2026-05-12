@@ -1,5 +1,12 @@
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import type { Href } from 'expo-router';
@@ -43,6 +50,35 @@ export default function LoginScreen(): React.JSX.Element {
     p.play();
   });
 
+  const keyboardBottom = useSharedValue(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      keyboardBottom.value = withTiming(e.endCoordinates.height, {
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+      });
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardBottom.value = withTiming(0, {
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+      });
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [keyboardBottom]);
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    bottom: keyboardBottom.value,
+  }));
+
   const {
     control,
     handleSubmit,
@@ -66,8 +102,12 @@ export default function LoginScreen(): React.JSX.Element {
 
   return (
     <View style={styles.root}>
-      {/* ── Background video ──────────────────────────────────── */}
-      <View style={styles.videoContainer}>
+      {/* ── Background video — tap anywhere here to dismiss keyboard ── */}
+      <Pressable
+        style={styles.videoContainer}
+        onPress={Keyboard.dismiss}
+        accessible={false}
+      >
         {HAS_VIDEO && (
           <VideoView
             player={player}
@@ -76,10 +116,10 @@ export default function LoginScreen(): React.JSX.Element {
             nativeControls={false}
           />
         )}
-      </View>
+      </Pressable>
 
-      {/* ── Bottom sheet ─────────────────────────────────────── */}
-      <AuthSheet>
+      {/* ── Bottom sheet — lifts above keyboard when active ──── */}
+      <AuthSheet style={sheetStyle}>
         <Text style={styles.heading}>Sign in</Text>
         <Text style={styles.subtitle}>Your watchlist has been waiting.</Text>
 

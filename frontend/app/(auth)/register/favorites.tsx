@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import api from '@/src/lib/api';
 import { OnboardingScreen } from '@/src/components/auth/OnboardingScreen';
 import { useRegister } from '@/src/context/RegisterContext';
 import { useTopRatedFilms, useSearchFilms } from '@/src/hooks/useFilms';
@@ -160,8 +161,18 @@ export default function RegisterFavoritesScreen(): React.JSX.Element {
     router.replace(HOME_ROUTE);
   };
 
-  const handleContinue = (): void => {
-    // TODO: PUT /users/me/favorites with favoriteFilmIds
+  const handleContinue = async (): Promise<void> => {
+    if (favoriteFilmIds.length > 0) {
+      const items = favoriteFilmIds.map((tmdb_id, index) => ({
+        position: (index + 1) as 1 | 2 | 3 | 4,
+        tmdb_id,
+        media_type: 'film' as const,
+      }));
+      try {
+        await api.put('/users/me/favorites', { items });
+      } catch {
+      }
+    }
     reset();
     router.replace(HOME_ROUTE);
   };
@@ -184,7 +195,6 @@ export default function RegisterFavoritesScreen(): React.JSX.Element {
     [favoriteFilmIds, toggleFavorite],
   );
 
-  // Slots look up film objects from selectedFilms, which persists across query switches.
   const renderSlots = (): React.JSX.Element => (
     <View style={styles.slots}>
       {[1, 2, 3, 4].map((pos) => {
@@ -264,7 +274,7 @@ export default function RegisterFavoritesScreen(): React.JSX.Element {
       currentStep={5}
       totalSteps={5}
       onSkip={handleSkip}
-      onContinue={handleContinue}
+      onContinue={() => void handleContinue()}
       hideContinue
       scrollable={false}
       hideTopBar
@@ -283,7 +293,7 @@ export default function RegisterFavoritesScreen(): React.JSX.Element {
           <View
             onLayout={(e) => {
               const HEADER_PADDING_TOP = 12;
-              const HEADER_PADDING_BOTTOM = 20; // matches styles.fixedHeader paddingBottom
+              const HEADER_PADDING_BOTTOM = 20; 
               const contentH = e.nativeEvent.layout.height;
               const totalH = HEADER_PADDING_TOP + contentH + HEADER_PADDING_BOTTOM;
               expandedH.value = totalH;

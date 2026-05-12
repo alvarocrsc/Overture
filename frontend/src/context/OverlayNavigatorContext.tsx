@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -11,15 +12,11 @@ import { useSegments } from 'expo-router';
 
 import type { TabName } from '@/src/components/shared/TabBarUI';
 
-/**
- * Names of detail screens that can be presented as overlays on top of the
- * tab navigator. Add new entries here AND register a renderer in
- * `OverlayRegistry.tsx` to support a new detail screen.
- */
 export type OverlayName =
   | 'user'
   | 'film'
   | 'series'
+  | 'review'
   | 'person'
   | 'list';
 
@@ -29,34 +26,31 @@ export interface OverlayEntry {
   id: string;
   name: OverlayName;
   params: OverlayParams;
-  /** Tab the user was on when the overlay was presented. */
   originTab: TabName;
 }
 
 interface OverlayNavigatorValue {
-  /** Currently presented overlay, or null when none is active. */
+  stack: OverlayEntry[];
   current: OverlayEntry | null;
-  /**
-   * Push a new detail overlay above the current tab. The originating tab
-   * is captured automatically from the router segments and used to
-   * highlight the correct icon while the overlay is open.
-   */
   present: (name: OverlayName, params: OverlayParams) => void;
-  /**
-   * Dismiss the current overlay. If `targetTab` is provided and differs
-   * from the originating tab, navigates to that tab once the slide-out
-   * animation completes.
-   */
   dismiss: (targetTab?: TabName) => void;
+  dismissTop: () => void;
+  clearAll: () => void;
+  lastTab: TabName;
+  dismissAll: (targetTab?: TabName) => void;
 }
 
 interface InternalOverlayValue extends OverlayNavigatorValue {
-  /** Called by the host to register its imperative dismiss handler. */
   _registerDismissHandler: (
+    id: string,
     handler: ((targetTab?: TabName) => void) | null,
   ) => void;
-  /** Called by the host once the slide-out animation has completed. */
-  _removeCurrent: () => void;
+  _removeEntry: (id: string) => void;
+  _removeAll: () => void;
+  _registerTopTrigger: (
+    trigger: ((mode: 'top' | 'all') => void) | null,
+  ) => void;
+  _pendingTargetTabRef: React.MutableRefObject<TabName | null>;
 }
 
 const OverlayContext = createContext<InternalOverlayValue | null>(null);
@@ -82,55 +76,129 @@ interface OverlayNavigatorProviderProps {
 export function OverlayNavigatorProvider({
   children,
 }: OverlayNavigatorProviderProps): React.JSX.Element {
-  const [current, setCurrent] = useState<OverlayEntry | null>(null);
-  const dismissHandlerRef = useRef<((target?: TabName) => void) | null>(null);
+  const [stack, setStack] = useState<OverlayEntry[]>([]);
+  const [lastTab, setLastTab] = useState<TabName>('home');
+  const dismissHandlersRef = useRef<
+    Map<string, (target?: TabName) => void>
+  >(new Map());
+  const topTriggerRef = useRef<((mode: 'top' | 'all') => void) | null>(null);
+  const pendingTargetTabRef = useRef<TabName | null>(null);
   const idCounterRef = useRef(0);
   const segments = useSegments();
 
+  useEffect(() => {
+    if (segments[0] === '(tabs)') {
+      const tabSegment = segments[1] as string | undefined;
+      const tab = tabSegment ? TAB_SEGMENT_TO_NAME[tabSegment] : undefined;
+      if (tab) setLastTab(tab);
+    }
+  }, [segments]);
+
   const present = useCallback(
     (name: OverlayName, params: OverlayParams): void => {
-      // Dismiss any open keyboard before presenting — prevents the keyboard
-      // from persisting across navigation (e.g. from the log search screen).
       Keyboard.dismiss();
-      // segments looks like ['(tabs)', 'log'] when the user is on the log tab.
       const tabSegment = (segments[1] as string | undefined) ?? 'home';
       const originTab = TAB_SEGMENT_TO_NAME[tabSegment] ?? 'home';
       idCounterRef.current += 1;
-      setCurrent({
+      const entry: OverlayEntry = {
         id: `overlay-${idCounterRef.current}`,
         name,
         params,
         originTab,
-      });
+      };
+      setStack((prev) => [...prev, entry]);
     },
     [segments],
   );
 
   const dismiss = useCallback((targetTab?: TabName): void => {
-    dismissHandlerRef.current?.(targetTab);
+    const top = dismissHandlersRef.current;
+    const handlers = Array.from(top.values());
+    const topHandler = handlers[handlers.length - 1];
+    if (topHandler) {
+      topHandler(targetTab);
+    }
   }, []);
 
-  const _registerDismissHandler = useCallback(
-    (handler: ((targetTab?: TabName) => void) | null): void => {
-      dismissHandlerRef.current = handler;
+  const dismissTop = useCallback((): void => {
+    const handlers = Array.from(dismissHandlersRef.current.values());
+    const topHandler = handlers[handlers.length - 1];
+    if (topHandler) {
+      topHandler();
+    }
+  }, []);
+
+  const dismissAll = useCallback((targetTab?: TabName): void => {
+    if (!topTriggerRef.current) return;
+    pendingTargetTabRef.current = targetTab ?? null;
+    topTriggerRef.current('all');
+  }, []);
+
+  const _registerTopTrigger = useCallback(
+    (trigger: ((mode: 'top' | 'all') => void) | null): void => {
+      topTriggerRef.current = trigger;
     },
     [],
   );
 
-  const _removeCurrent = useCallback((): void => {
-    dismissHandlerRef.current = null;
-    setCurrent(null);
+  const _registerDismissHandler = useCallback(
+    (
+      id: string,
+      handler: ((targetTab?: TabName) => void) | null,
+    ): void => {
+      if (handler == null) {
+        dismissHandlersRef.current.delete(id);
+      } else {
+        dismissHandlersRef.current.set(id, handler);
+      }
+    },
+    [],
+  );
+
+  const _removeEntry = useCallback((id: string): void => {
+    dismissHandlersRef.current.delete(id);
+    setStack((prev) => prev.filter((e) => e.id !== id));
   }, []);
+
+  const _removeAll = useCallback((): void => {
+    dismissHandlersRef.current.clear();
+    setStack([]);
+  }, []);
+
+  const current = stack.length > 0 ? stack[stack.length - 1] : null;
+
+  const clearAll = _removeAll;
 
   const value = useMemo<InternalOverlayValue>(
     () => ({
+      stack,
       current,
       present,
       dismiss,
+      dismissTop,
+      dismissAll,
+      clearAll,
+      lastTab,
       _registerDismissHandler,
-      _removeCurrent,
+      _removeEntry,
+      _removeAll,
+      _registerTopTrigger,
+      _pendingTargetTabRef: pendingTargetTabRef,
     }),
-    [current, present, dismiss, _registerDismissHandler, _removeCurrent],
+    [
+      stack,
+      current,
+      present,
+      dismiss,
+      dismissTop,
+      dismissAll,
+      clearAll,
+      lastTab,
+      _registerDismissHandler,
+      _removeEntry,
+      _removeAll,
+      _registerTopTrigger,
+    ],
   );
 
   return (
