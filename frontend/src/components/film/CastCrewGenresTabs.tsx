@@ -84,7 +84,7 @@ export default function CastCrewGenresTabs({
                 activeTab === 'cast'
                   ? (row as FilmCastMember).character_name ?? null
                   : (row as FilmCrewMember).job;
-              const avatar = posterUrl(row.profile_path, 'w185');
+              const avatar = posterUrl(row.profile_path, 'w342');
               const key =
                 activeTab === 'crew'
                   ? `${row.person_tmdb_id}-${(row as FilmCrewMember).job}-${idx}`

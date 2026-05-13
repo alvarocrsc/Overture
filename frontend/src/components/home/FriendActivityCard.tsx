@@ -42,7 +42,7 @@ export default function FriendActivityCard({
   onPress,
   onAvatarPress,
 }: Props) {
-  const uri = posterUrl(posterPath, 'w185');
+  const uri = posterUrl(posterPath, 'w500');
 
   return (
     <Pressable style={styles.card} onPress={onPress} onPressIn={() => {}}>

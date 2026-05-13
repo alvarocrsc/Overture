@@ -37,7 +37,7 @@ export default function RecentActivityRow({
           if (!item) {
             return <View key={`empty-${idx}`} style={styles.posterEmpty} />;
           }
-          const uri = posterUrl(item.poster_path, 'w342');
+          const uri = posterUrl(item.poster_path, 'original');
           return (
             <Pressable
               key={item.id}

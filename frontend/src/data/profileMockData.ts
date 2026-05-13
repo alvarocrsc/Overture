@@ -18,7 +18,6 @@ export const MOCK_PROFILE: UserProfile = {
   location: 'Spain',
   accent_color: '#1A77DA',
   profile_backdrop_tmdb_id: null,
-  // Twin Peaks backdrop used in Figma — keeps the dark moody banner.
   profile_backdrop_path: '/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg',
   followers_count: 9,
   following_count: 5,

@@ -59,7 +59,7 @@ export default function DividesCard({
   ratingSpread,
   onSeeDebate,
 }: Props) {
-  const uri = posterUrl(posterPath, 'w185');
+  const uri = posterUrl(posterPath, 'w500');
   const badWidth = Math.round(BAR_WIDTH * negativePercent);
   const goodWidth = Math.round(BAR_WIDTH * positivePercent);
 

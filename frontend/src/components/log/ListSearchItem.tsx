@@ -31,7 +31,7 @@ export default function ListSearchItem({
     >
       <View style={styles.collage}>
         {cells.slice(0, 6).map((p, idx) => {
-          const url = p ? (p.startsWith('http') ? p : posterUrl(p, 'w185')) : null;
+          const url = p ? (p.startsWith('http') ? p : posterUrl(p, 'w500')) : null;
           return (
             <View key={idx} style={styles.cell}>
               {url ? (

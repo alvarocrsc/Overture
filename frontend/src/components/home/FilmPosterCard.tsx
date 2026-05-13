@@ -13,7 +13,7 @@ interface Props {
  * Simple 90×135 poster card used in horizontal carousels such as New Films/Series.
  */
 export default function FilmPosterCard({ posterPath, onPress }: Props) {
-  const uri = posterUrl(posterPath, 'w185');
+  const uri = posterUrl(posterPath, 'w500');
 
   return (
     <Pressable style={styles.card} onPress={onPress}>

@@ -130,7 +130,7 @@ export default function MediaSearchItem({
 function resolveThumbnail(path: string | null): string | null {
   if (!path) return null;
   if (path.startsWith('http')) return path;
-  return posterUrl(path, 'w185');
+  return posterUrl(path, 'w500');
 }
 
 const styles = StyleSheet.create({

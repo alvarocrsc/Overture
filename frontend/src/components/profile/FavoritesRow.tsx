@@ -49,7 +49,7 @@ export default function FavoritesRow({
               </Pressable>
             );
           }
-          const uri = posterUrl(fav.poster_path, 'w342');
+          const uri = posterUrl(fav.poster_path, 'original');
           return (
             <View key={slot} style={styles.poster}>
               {uri ? (

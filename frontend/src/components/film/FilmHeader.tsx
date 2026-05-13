@@ -45,7 +45,7 @@ export default function FilmHeader({
   const backdropPath = film.custom_backdrop_path ?? film.backdrop_path;
   const posterPath = film.custom_poster_path ?? film.poster_path;
   const backdropUri = backdropUrl(backdropPath, 'w1280');
-  const posterUri = posterUrl(posterPath, 'w342');
+  const posterUri = posterUrl(posterPath, 'original');
 
   const logoPath = useMemo<string | null>(() => {
     const logos = images?.logos ?? [];

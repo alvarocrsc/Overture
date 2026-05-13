@@ -47,7 +47,7 @@ export default function SeriesHeader({
   const backdropPath = series.custom_backdrop_path ?? series.backdrop_path;
   const posterPath = series.custom_poster_path ?? series.poster_path;
   const backdropUri = backdropUrl(backdropPath, 'w1280');
-  const posterUri = posterUrl(posterPath, 'w342');
+  const posterUri = posterUrl(posterPath, 'original');
 
   const logoPath = useMemo<string | null>(() => {
     const logos = images?.logos ?? [];

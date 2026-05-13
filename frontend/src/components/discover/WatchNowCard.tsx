@@ -5,9 +5,9 @@ import { FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
 
 // Hardcoded posters for the "What should I watch right now?" card.
-const IMG_ANGELS_EGG = posterUrl('/dcEUGvckbePFzPKhGXnS9T3kZMG.jpg', 'w185')!;
-const IMG_2001 = posterUrl('/ve72VxNqjGM69Uky4WTo2bK6rfq.jpg', 'w185')!;
-const IMG_PERSONA = posterUrl('/yPTntWP9Wvew8vHN0jB7Z1EvEUN.jpg', 'w185')!;
+const IMG_ANGELS_EGG = posterUrl('/dcEUGvckbePFzPKhGXnS9T3kZMG.jpg', 'w342')!;
+const IMG_2001 = posterUrl('/ve72VxNqjGM69Uky4WTo2bK6rfq.jpg', 'w342')!;
+const IMG_PERSONA = posterUrl('/yPTntWP9Wvew8vHN0jB7Z1EvEUN.jpg', 'w342')!;
 
 const POSTERS = [
   {

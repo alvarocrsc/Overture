@@ -78,7 +78,7 @@ export function DividesCarousel({ items }: DividesCarouselProps): React.JSX.Elem
 
   useEffect(() => {
     const urls = items
-      .map((it) => posterUrl(it.poster_path, 'w185'))
+      .map((it) => posterUrl(it.poster_path, 'w500'))
       .filter((u): u is string => Boolean(u));
     if (urls.length > 0) {
       Image.prefetch(urls, 'memory-disk');
@@ -150,8 +150,8 @@ export function DividesCarousel({ items }: DividesCarouselProps): React.JSX.Elem
     };
   });
 
-  const uri2 = posterUrl(peek2Item.poster_path, 'w185');
-  const uri3 = posterUrl(peek3Item.poster_path, 'w185');
+  const uri2 = posterUrl(peek2Item.poster_path, 'w500');
+  const uri3 = posterUrl(peek3Item.poster_path, 'w500');
 
   return (
     <View style={styles.container}>

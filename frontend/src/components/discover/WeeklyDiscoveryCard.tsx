@@ -5,19 +5,19 @@ import { FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
 
 // Hardcoded posters for the "Weekly discovery" 
-const IMG_HER            = posterUrl('/eCOtqtfvn7mxGl6nfmq4b1exJRc.jpg', 'w185')!;
-const IMG_HOURGLASS      = posterUrl('/wV6LsDuRHPGbQqRsaAAu3xHgflW.jpg', 'w185')!;
-const IMG_EYES_WIDE_SHUT = posterUrl('/knEIz1eNGl5MQDbrEAVWA7iRqF9.jpg', 'w185')!;
-const IMG_REQUIEM        = posterUrl('/nOd6vjEmzCT0k4VYqsA2hwyi87C.jpg', 'w185')!;
-const IMG_AMERICAN_PSYCHO = posterUrl('/9uGHEgsiUXjCNq8wdq4r49YL8A1.jpg', 'w185')!;
-const IMG_MULHOLLAND     = posterUrl('/x7A59t6ySylr1L7aubOQEA480vM.jpg', 'w185')!;
-const IMG_LOST_HIGHWAY   = posterUrl('/5POhfNeFPIi4VUNwCTaK85sh98r.jpg', 'w185')!;
-const IMG_AUTUMN_SONATA  = posterUrl('/6beNbtCXv3GkzHkxkGYf38ib7v8.jpg', 'w185')!;
-const IMG_LITTLE_MISS    = posterUrl('/niNdhTpPHSgw22tK0PLjQMV640v.jpg', 'w185')!;
-const IMG_SERPENTS_PATH  = posterUrl('/kHUsXCAtjwQCcyCE8uLpksRt40M.jpg', 'w185')!;
-const IMG_MORVERN        = posterUrl('/qcX86XKhPH4Q02OcKv4cnbrmFOn.jpg', 'w185')!;
-const IMG_VIDEODROME     = posterUrl('/qqqkiZSU9EBGZ1KiDmfn07S7qvv.jpg', 'w185')!;
-const IMG_PSYCHO         = posterUrl('/fqKbTHbbH27ulQ16kaReRI71gvY.jpg', 'w185')!;
+const IMG_HER            = posterUrl('/eCOtqtfvn7mxGl6nfmq4b1exJRc.jpg', 'w342')!;
+const IMG_HOURGLASS      = posterUrl('/wV6LsDuRHPGbQqRsaAAu3xHgflW.jpg', 'w342')!;
+const IMG_EYES_WIDE_SHUT = posterUrl('/knEIz1eNGl5MQDbrEAVWA7iRqF9.jpg', 'w342')!;
+const IMG_REQUIEM        = posterUrl('/nOd6vjEmzCT0k4VYqsA2hwyi87C.jpg', 'w342')!;
+const IMG_AMERICAN_PSYCHO = posterUrl('/9uGHEgsiUXjCNq8wdq4r49YL8A1.jpg', 'w342')!;
+const IMG_MULHOLLAND     = posterUrl('/x7A59t6ySylr1L7aubOQEA480vM.jpg', 'w342')!;
+const IMG_LOST_HIGHWAY   = posterUrl('/5POhfNeFPIi4VUNwCTaK85sh98r.jpg', 'w342')!;
+const IMG_AUTUMN_SONATA  = posterUrl('/6beNbtCXv3GkzHkxkGYf38ib7v8.jpg', 'w342')!;
+const IMG_LITTLE_MISS    = posterUrl('/niNdhTpPHSgw22tK0PLjQMV640v.jpg', 'w342')!;
+const IMG_SERPENTS_PATH  = posterUrl('/kHUsXCAtjwQCcyCE8uLpksRt40M.jpg', 'w342')!;
+const IMG_MORVERN        = posterUrl('/qcX86XKhPH4Q02OcKv4cnbrmFOn.jpg', 'w342')!;
+const IMG_VIDEODROME     = posterUrl('/qqqkiZSU9EBGZ1KiDmfn07S7qvv.jpg', 'w342')!;
+const IMG_PSYCHO         = posterUrl('/fqKbTHbbH27ulQ16kaReRI71gvY.jpg', 'w342')!;
 
 const POSTERS: Array<{ src: string; left: number; top: number }> = [
   { src: IMG_HER,            left: 87,  top: 91 },

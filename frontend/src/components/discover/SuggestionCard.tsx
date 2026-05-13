@@ -35,7 +35,7 @@ export default function SuggestionCard({
       </Text>
       <View style={styles.collage} pointerEvents="none">
         {posterPaths.slice(0, 12).map((path, i) => {
-          const url = posterUrl(path, 'w185');
+          const url = posterUrl(path, 'w500');
           if (!url) return null;
           const col = i % 3;
           const row = Math.floor(i / 3);

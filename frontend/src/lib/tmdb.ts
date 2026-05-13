@@ -16,7 +16,7 @@ export type LogoSize = 'w45' | 'w92' | 'w154' | 'w185' | 'w300' | 'w500' | 'orig
  * @param size - Desired image size. Defaults to 'w342'.
  * @returns Full image URL or null if path is null/empty.
  */
-export function posterUrl(path: string | null | undefined, size: PosterSize = 'w342'): string | null {
+export function posterUrl(path: string | null | undefined, size: PosterSize = 'original'): string | null {
   if (!path) return null;
   return `${IMAGE_BASE_URL}/${size}${path}`;
 }
