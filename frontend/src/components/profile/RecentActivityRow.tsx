@@ -5,6 +5,7 @@ import { Colors, FontFamily } from '@/src/lib/colors';
 import SectionDivider from './SectionDivider';
 import StarRating from '@/src/components/home/StarRating';
 import { posterUrl } from '@/src/lib/tmdb';
+import { SCREEN_PADDING_H, useLayout } from '@/src/lib/layout';
 import type { RecentActivityItem } from '@/src/types/profile.types';
 
 interface RecentActivityRowProps {
@@ -12,8 +13,6 @@ interface RecentActivityRowProps {
   onPressItem?: (item: RecentActivityItem) => void;
 }
 
-const POSTER_W = 84;
-const POSTER_H = 126;
 const MAX_ITEMS = 4;
 
 /**
@@ -26,6 +25,9 @@ export default function RecentActivityRow({
   onPressItem,
 }: RecentActivityRowProps): React.JSX.Element {
   const slots = items.slice(0, MAX_ITEMS);
+  const { recentActivityPosterWidth } = useLayout();
+  const posterWidth = recentActivityPosterWidth;
+  const posterHeight = Math.round(posterWidth * 1.5);
 
   return (
     <View style={styles.section}>
@@ -35,16 +37,21 @@ export default function RecentActivityRow({
         {Array.from({ length: MAX_ITEMS }).map((_, idx) => {
           const item = slots[idx];
           if (!item) {
-            return <View key={`empty-${idx}`} style={styles.posterEmpty} />;
+            return (
+              <View
+                key={`empty-${idx}`}
+                style={[styles.posterEmpty, { width: posterWidth, height: posterHeight + 16 }]}
+              />
+            );
           }
           const uri = posterUrl(item.poster_path, 'original');
           return (
             <Pressable
               key={item.id}
               onPress={() => onPressItem?.(item)}
-              style={styles.card}
+              style={[styles.card, { width: posterWidth }]}
             >
-              <View style={styles.poster}>
+              <View style={[styles.poster, { width: posterWidth, height: posterHeight }]}>
                 {uri ? (
                   <Image source={{ uri }} style={styles.posterImage} />
                 ) : (
@@ -89,16 +96,12 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING_H,
     marginTop: 8,
     justifyContent: 'space-between',
   },
-  card: {
-    width: POSTER_W,
-  },
+  card: {},
   poster: {
-    width: POSTER_W,
-    height: POSTER_H,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: Colors.cardBackground,
@@ -119,8 +122,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   posterEmpty: {
-    width: POSTER_W,
-    height: POSTER_H + 16,
+    // size set inline
   },
   ratingRow: {
     marginTop: 5,

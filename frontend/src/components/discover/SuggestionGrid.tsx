@@ -1,8 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
-import { Spacing } from '@/src/lib/colors';
-import SuggestionCard from './SuggestionCard';
+import { CARD_GAP, SCREEN_PADDING_H } from '@/src/lib/layout';
 import ActorFavoritesCard from './ActorFavoritesCard';
 import SeenTheseCard from './SeenTheseCard';
 import WatchNowCard from './WatchNowCard';
@@ -65,12 +64,12 @@ export default function SuggestionGrid({ posterPaths }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: Spacing.screenH,
-    gap: 11,
+    paddingHorizontal: SCREEN_PADDING_H,
+    gap: CARD_GAP,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: CARD_GAP,
   },
   cell: {
     flex: 1,

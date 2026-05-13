@@ -13,9 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Colors,
   FontFamily,
-  Spacing,
   TAB_BAR_HEIGHT,
 } from '@/src/lib/colors';
+import { SCREEN_PADDING_H } from '@/src/lib/layout';
 import SectionHeader from '@/src/components/home/SectionHeader';
 import DiscoverSearchBar from '@/src/components/discover/DiscoverSearchBar';
 import SuggestionGrid from '@/src/components/discover/SuggestionGrid';
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.screenH,
+    paddingHorizontal: SCREEN_PADDING_H,
     paddingBottom: 12,
   },
   headerTitle: {
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   searchWrapper: {
-    paddingHorizontal: Spacing.screenH,
+    paddingHorizontal: SCREEN_PADDING_H,
     marginBottom: 4,
   },
   section: {

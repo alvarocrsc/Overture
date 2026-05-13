@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Spacing } from '@/src/lib/colors';
+import { CARD_GAP, SCREEN_PADDING_H, useLayout } from '@/src/lib/layout';
 import TrendingCard, { type TrendingFilm } from './TrendingCard';
 
 interface Props {
@@ -15,9 +15,6 @@ interface Props {
   onCardPress: (film: TrendingFilm) => void;
 }
 
-const CARD_WIDTH = 350;
-const GAP = 10;
-const SNAP_INTERVAL = CARD_WIDTH + GAP;
 const SKELETON_COUNT = 3;
 
 export default function TrendingCarousel({
@@ -25,6 +22,9 @@ export default function TrendingCarousel({
   loading = false,
   onCardPress,
 }: Props) {
+  const { fullCarouselCardWidth } = useLayout();
+  const cardWidth = fullCarouselCardWidth;
+  const snapInterval = cardWidth + CARD_GAP;
   const [activeIndex, setActiveIndex] = useState(0);
   const [muted, setMuted] = useState(true);
 
@@ -33,12 +33,12 @@ export default function TrendingCarousel({
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = event.nativeEvent.contentOffset.x;
-      const index = Math.round(x / SNAP_INTERVAL);
+      const index = Math.round(x / snapInterval);
       if (index !== activeIndex) {
         setActiveIndex(index);
       }
     },
-    [activeIndex],
+    [activeIndex, snapInterval],
   );
 
   const toggleMute = useCallback(() => setMuted((m) => !m), []);
@@ -49,7 +49,7 @@ export default function TrendingCarousel({
         horizontal
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
-        snapToInterval={SNAP_INTERVAL}
+        snapToInterval={snapInterval}
         snapToAlignment="start"
         contentContainerStyle={styles.content}
       >
@@ -57,11 +57,11 @@ export default function TrendingCarousel({
           <View
             key={`skeleton-${i}`}
             style={[
-              styles.cardWrapper,
+              { width: cardWidth },
               i < SKELETON_COUNT - 1 && styles.cardGap,
             ]}
           >
-            <TrendingCard film={null} />
+            <TrendingCard film={null} cardWidth={cardWidth} />
           </View>
         ))}
       </ScrollView>
@@ -73,7 +73,7 @@ export default function TrendingCarousel({
       horizontal
       showsHorizontalScrollIndicator={false}
       decelerationRate="fast"
-      snapToInterval={SNAP_INTERVAL}
+      snapToInterval={snapInterval}
       snapToAlignment="start"
       contentContainerStyle={styles.content}
       onScroll={onScroll}
@@ -82,10 +82,14 @@ export default function TrendingCarousel({
       {films.map((film, i) => (
         <View
           key={film.tmdb_id}
-          style={[styles.cardWrapper, i < films.length - 1 && styles.cardGap]}
+          style={[
+            { width: cardWidth },
+            i < films.length - 1 && styles.cardGap,
+          ]}
         >
           <TrendingCard
             film={film}
+            cardWidth={cardWidth}
             active={i === activeIndex}
             muted={muted}
             onToggleMute={toggleMute}
@@ -99,12 +103,9 @@ export default function TrendingCarousel({
 
 const styles = StyleSheet.create({
   content: {
-    paddingHorizontal: Spacing.screenH,
-  },
-  cardWrapper: {
-    width: CARD_WIDTH,
+    paddingHorizontal: SCREEN_PADDING_H,
   },
   cardGap: {
-    marginRight: GAP,
+    marginRight: CARD_GAP,
   },
 });

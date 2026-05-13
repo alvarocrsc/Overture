@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import SectionDivider from './SectionDivider';
 import { posterUrl } from '@/src/lib/tmdb';
+import { SCREEN_PADDING_H, useLayout } from '@/src/lib/layout';
 import type { UserFavorite } from '@/src/types/profile.types';
 
 interface FavoritesRowProps {
@@ -13,8 +14,6 @@ interface FavoritesRowProps {
   onRemovePress?: (position: number) => void;
 }
 
-const POSTER_W = 84;
-const POSTER_H = 126;
 const SLOTS: ReadonlyArray<1 | 2 | 3 | 4> = [1, 2, 3, 4];
 
 /**
@@ -30,6 +29,10 @@ export default function FavoritesRow({
 }: FavoritesRowProps): React.JSX.Element {
   const byPosition = new Map(favorites.map((f) => [f.position, f]));
   const count = favorites.length;
+  const { favoritePosterWidth } = useLayout();
+  const posterWidth = favoritePosterWidth;
+  const posterHeight = Math.round(posterWidth * 1.5);
+  const posterSizeStyle = { width: posterWidth, height: posterHeight };
 
   return (
     <View style={styles.section}>
@@ -43,7 +46,7 @@ export default function FavoritesRow({
               <Pressable
                 key={slot}
                 onPress={isOwnProfile ? () => onSlotPress?.(slot) : undefined}
-                style={styles.posterEmpty}
+                style={[styles.posterEmpty, posterSizeStyle]}
               >
                 {isOwnProfile ? <Text style={styles.plus}>+</Text> : null}
               </Pressable>
@@ -51,7 +54,7 @@ export default function FavoritesRow({
           }
           const uri = posterUrl(fav.poster_path, 'original');
           return (
-            <View key={slot} style={styles.poster}>
+            <View key={slot} style={[styles.poster, posterSizeStyle]}>
               {uri ? (
                 <Image source={{ uri }} style={styles.posterImage} />
               ) : (
@@ -84,13 +87,11 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING_H,
     marginTop: 10,
     justifyContent: 'space-between',
   },
   poster: {
-    width: POSTER_W,
-    height: POSTER_H,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: Colors.cardBackground,
@@ -111,8 +112,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   posterEmpty: {
-    width: POSTER_W,
-    height: POSTER_H,
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',

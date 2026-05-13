@@ -9,12 +9,16 @@ import {
 import { Colors, FontFamily } from '@/src/lib/colors';
 import SectionDivider from './SectionDivider';
 import { backdropUrl } from '@/src/lib/tmdb';
+import { CARD_GAP, SCREEN_PADDING_H, useLayout } from '@/src/lib/layout';
 
 interface MediaCardProps {
   label: string;
   count: number;
   thisYear?: number;
   backdropPath: string;
+  width: number;
+  height: number;
+  labelFontSize: number;
   onPress?: () => void;
 }
 
@@ -33,8 +37,7 @@ interface MediaGridProps {
   onPressLists?: () => void;
 }
 
-const CARD_W = 170;
-const CARD_H = 100;
+const CARD_ASPECT = 100 / 170; // preserve original height/width ratio
 
 // Backdrop paths for each card.
 const BG = {
@@ -51,13 +54,20 @@ function MediaCard({
   count,
   thisYear,
   backdropPath,
+  width,
+  height,
+  labelFontSize,
   onPress,
 }: MediaCardProps): React.JSX.Element {
   const uri = backdropUrl(backdropPath, 'w780');
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+      style={({ pressed }) => [
+        styles.card,
+        { width, height },
+        pressed && { opacity: 0.85 },
+      ]}
     >
       {uri ? (
         <ImageBackground
@@ -70,7 +80,10 @@ function MediaCard({
       )}
       <View style={styles.cardOverlay} pointerEvents="none" />
       <View style={styles.cardContent}>
-        <Text style={styles.cardLabel} numberOfLines={2}>
+        <Text
+          style={[styles.cardLabel, { fontSize: labelFontSize }]}
+          numberOfLines={2}
+        >
           {label}
         </Text>
         <View style={styles.cardRight}>
@@ -110,6 +123,16 @@ export default function MediaGrid({
   onPressReviews,
   onPressLists,
 }: MediaGridProps): React.JSX.Element {
+  const { gridCardWidth, isSmallScreen, isTinyScreen } = useLayout();
+  const cardHeight = Math.round(gridCardWidth * CARD_ASPECT);
+  const labelFontSize = isTinyScreen ? 10 : isSmallScreen ? 11 : 13;
+
+  const cardSize = {
+    width: gridCardWidth,
+    height: cardHeight,
+    labelFontSize,
+  };
+
   return (
     <View style={styles.section}>
       <SectionDivider prefix="YOUR" label="MEDIA" />
@@ -121,6 +144,7 @@ export default function MediaGrid({
           thisYear={films.thisYear}
           backdropPath={BG.films}
           onPress={onPressFilms}
+          {...cardSize}
         />
         <MediaCard
           label="SERIES"
@@ -128,6 +152,7 @@ export default function MediaGrid({
           thisYear={series.thisYear}
           backdropPath={BG.series}
           onPress={onPressSeries}
+          {...cardSize}
         />
         <MediaCard
           label="DIARY"
@@ -135,24 +160,28 @@ export default function MediaGrid({
           thisYear={diary.thisYear}
           backdropPath={BG.diary}
           onPress={onPressDiary}
+          {...cardSize}
         />
         <MediaCard
           label="WATCHLIST"
           count={watchlist}
           backdropPath={BG.watchlist}
           onPress={onPressWatchlist}
+          {...cardSize}
         />
         <MediaCard
           label="REVIEWS"
           count={reviews}
           backdropPath={BG.reviews}
           onPress={onPressReviews}
+          {...cardSize}
         />
         <MediaCard
           label="LISTS"
           count={lists}
           backdropPath={BG.lists}
           onPress={onPressLists}
+          {...cardSize}
         />
       </View>
     </View>
@@ -166,14 +195,13 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 20,
+    paddingHorizontal: SCREEN_PADDING_H,
     marginTop: 10,
-    rowGap: 9,
-    justifyContent: 'space-between',
+    rowGap: CARD_GAP,
+    columnGap: CARD_GAP,
+    justifyContent: 'flex-start',
   },
   card: {
-    width: CARD_W,
-    height: CARD_H,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: Colors.cardBackground,
@@ -204,7 +232,6 @@ const styles = StyleSheet.create({
   },
   cardLabel: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 16,
     color: Colors.white,
     letterSpacing: -1,
     textAlign: 'center',

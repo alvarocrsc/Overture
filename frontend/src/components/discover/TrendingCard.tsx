@@ -22,14 +22,15 @@ export interface TrendingFilm {
 
 interface Props {
   film: TrendingFilm | null;
+  /** Width of the card. Computed by the parent carousel from screen width. */
+  cardWidth: number;
   active?: boolean;
   muted?: boolean;
   onToggleMute?: () => void;
   onPress?: () => void;
 }
 
-const CARD_WIDTH = 350;
-const BACKDROP_HEIGHT = 186;
+const BACKDROP_ASPECT = 186 / 350; // preserve original aspect ratio
 
 /**
  * Single trending-film card on the Discover screen. The static TMDB
@@ -38,11 +39,13 @@ const BACKDROP_HEIGHT = 186;
  */
 export default function TrendingCard({
   film,
+  cardWidth,
   active = false,
   muted = true,
   onToggleMute,
   onPress,
 }: Props) {
+  const backdropHeight = Math.round(cardWidth * BACKDROP_ASPECT);
   const [isReady, setIsReady] = useState(false);
   const { data: trailerKey } = useFilmTrailer(film?.tmdb_id);
   const watchlist = useWatchlistToggle(film?.tmdb_id ?? 0, 'film');
@@ -53,8 +56,8 @@ export default function TrendingCard({
 
   if (!film) {
     return (
-      <View style={styles.card}>
-        <View style={[styles.backdropWrapper, styles.skeleton]} />
+      <View style={[styles.card, { width: cardWidth }]}>
+        <View style={[styles.backdropWrapper, { width: cardWidth, height: backdropHeight }, styles.skeleton]} />
         <View style={[styles.skeletonLine, styles.skeletonLineWide]} />
         <View style={[styles.skeletonLine, styles.skeletonLineNarrow]} />
       </View>
@@ -68,8 +71,8 @@ export default function TrendingCard({
   const showTrailer = active && Boolean(trailerKey);
 
   return (
-    <View style={styles.card}>
-      <View style={styles.backdropWrapper}>
+    <View style={[styles.card, { width: cardWidth }]}>
+      <View style={[styles.backdropWrapper, { width: cardWidth, height: backdropHeight }]}>
         {backdropUri ? (
           <Image
             source={{ uri: backdropUri }}
@@ -92,8 +95,8 @@ export default function TrendingCard({
           >
             <YoutubeBackgroundPlayer
               videoId={trailerKey}
-              width={CARD_WIDTH}
-              height={BACKDROP_HEIGHT}
+              width={cardWidth}
+              height={backdropHeight}
               muted={muted}
               onReady={() => setIsReady(true)}
             />
@@ -168,12 +171,8 @@ export default function TrendingCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    width: CARD_WIDTH,
-  },
+  card: {},
   backdropWrapper: {
-    width: CARD_WIDTH,
-    height: BACKDROP_HEIGHT,
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
