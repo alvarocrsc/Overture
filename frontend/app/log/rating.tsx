@@ -16,6 +16,8 @@ import {
   FontFamily,
   LetterSpacing,
   Radius,
+  TAB_BAR_HEIGHT,
+  TAB_BAR_BOTTOM_OFFSET,
 } from '@/src/lib/colors';
 
 /**
@@ -54,7 +56,7 @@ export default function LogRatingScreen(): React.JSX.Element {
         <Text style={styles.ratingValue}>{ratingText}</Text>
       </View>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET - 16}]}>
         <Pressable
           onPress={handleContinue}
           style={({ pressed }) => [

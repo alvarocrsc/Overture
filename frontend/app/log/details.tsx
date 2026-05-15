@@ -25,6 +25,8 @@ import {
   FontFamily,
   LetterSpacing,
   Radius,
+  TAB_BAR_HEIGHT,
+  TAB_BAR_BOTTOM_OFFSET,
 } from '@/src/lib/colors';
 import { formatWatchedOn, toIsoDate } from '@/src/lib/dateFormat';
 
@@ -262,7 +264,7 @@ export default function LogDetailsScreen(): React.JSX.Element {
         </Pressable>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + 16 }]}>
         <Pressable
           onPress={() => logMutation.mutate()}
           disabled={logMutation.isPending}

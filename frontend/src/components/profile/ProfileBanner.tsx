@@ -157,7 +157,7 @@ export default function ProfileBanner({
       <View style={[styles.leftColumn, { top: insets.top + 27 }]}>
         {(() => {
           const displayName = profile.name || profile.username;
-          const nameFontSize = displayName.length > 8 ? 22 : 28;
+          const nameFontSize = displayName.length > 11 ? 17 : displayName.length > 8 ? 22 : 28;
           return (
             <Text style={[styles.name, { fontSize: nameFontSize }]} numberOfLines={1}>
               {displayName}
