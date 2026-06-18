@@ -1,4 +1,5 @@
 import { query, execute } from '../config/db';
+import cloudinary from '../config/cloudinary';
 import { AppError } from '../utils/app-error';
 import type {
   CreateListInput,
@@ -15,6 +16,8 @@ export interface ListSummaryRow {
   id: number;
   title: string;
   description: string | null;
+  icon_url: string | null;
+  view_mode: 'posters' | 'expanded';
   is_public: number;
   is_ranked: number;
   items_count: number;
@@ -30,6 +33,8 @@ export interface ListDetailRow {
   id: number;
   title: string;
   description: string | null;
+  icon_url: string | null;
+  view_mode: 'posters' | 'expanded';
   is_public: number;
   is_ranked: number;
   items_count: number;
@@ -133,6 +138,8 @@ export async function getMyLists(
        l.id,
        l.title,
        l.description,
+       l.icon_url,
+       l.view_mode,
        l.is_public,
        l.is_ranked,
        l.items_count,
@@ -158,24 +165,48 @@ export async function getMyLists(
  * Creates a new list for the authenticated user.
  * @param userId - The authenticated user's ID.
  * @param data - Validated input from createListSchema.
- * @returns The new listId.
+ * @returns The newly created list summary.
  */
 export async function createList(
   userId: number,
   data: CreateListInput,
-): Promise<{ listId: number }> {
+): Promise<ListSummaryRow> {
   const result = await execute(
-    `INSERT INTO lists (user_id, title, description, is_public, is_ranked, items_count)
-     VALUES (?, ?, ?, ?, ?, 0)`,
+    `INSERT INTO lists (user_id, title, description, icon_url, view_mode, is_public, is_ranked, items_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
     [
       userId,
       data.title,
       data.description ?? null,
+      data.icon_url ?? null,
+      data.view_mode,
       data.is_public ? 1 : 0,
       data.is_ranked ? 1 : 0,
     ],
   );
-  return { listId: result.insertId };
+
+  const [summary] = await query<ListSummaryRow>(
+    `SELECT
+       l.id,
+       l.title,
+       l.description,
+       l.icon_url,
+       l.view_mode,
+       l.is_public,
+       l.is_ranked,
+       l.items_count,
+       l.created_at,
+       l.updated_at,
+       u.username   AS owner_username,
+       u.avatar_url AS owner_avatar,
+       CASE WHEN l.user_id = ? THEN false ELSE true END AS is_saved
+     FROM lists l
+     JOIN users u ON l.user_id = u.id
+     WHERE l.id = ?`,
+    [userId, result.insertId],
+  );
+  // The row was just inserted — it is guaranteed to exist.
+  return summary!;
 }
 
 /**
@@ -194,6 +225,8 @@ export async function getListById(
        l.id,
        l.title,
        l.description,
+       l.icon_url,
+       l.view_mode,
        l.is_public,
        l.is_ranked,
        l.items_count,
@@ -267,6 +300,14 @@ export async function updateList(
   if ('description' in data) {
     setClauses.push('description = ?');
     params.push(data.description ?? null);
+  }
+  if ('icon_url' in data) {
+    setClauses.push('icon_url = ?');
+    params.push(data.icon_url ?? null);
+  }
+  if (data.view_mode !== undefined) {
+    setClauses.push('view_mode = ?');
+    params.push(data.view_mode);
   }
   if (data.is_public !== undefined) {
     setClauses.push('is_public = ?');
@@ -450,4 +491,45 @@ export async function unsaveList(listId: number, userId: number): Promise<void> 
     `DELETE FROM saved_lists WHERE user_id = ? AND list_id = ?`,
     [userId, listId],
   );
+}
+
+/**
+ * Uploads a list icon image to Cloudinary and saves the resulting URL on
+ * the list's `icon_url` column.
+ *
+ * The Cloudinary public id is `list_<listId>` with `overwrite: true`, so
+ * each list only ever has one icon asset regardless of how many times it
+ * is replaced.
+ *
+ * @param listId   The list's primary key.
+ * @param userId   The authenticated user's id (must own the list).
+ * @param buffer   The raw image bytes from multer's memory storage.
+ * @param mimetype The MIME type of the uploaded file (jpeg/png/webp).
+ * @returns        The new public Cloudinary `secure_url`.
+ */
+export async function uploadListIconService(
+  listId: number,
+  userId: number,
+  buffer: Buffer,
+  mimetype: string,
+): Promise<{ icon_url: string }> {
+  const list = await fetchListOrThrow(listId);
+  if (list.user_id !== userId) throw new AppError('Forbidden', 403);
+
+  const dataUri = `data:${mimetype};base64,${buffer.toString('base64')}`;
+
+  const result = await cloudinary.uploader.upload(dataUri, {
+    folder: 'overture/list-icons',
+    public_id: `list_${listId}`,
+    resource_type: 'image',
+    overwrite: true,
+    transformation: [{ quality: 'auto', fetch_format: 'auto' }],
+  });
+
+  await execute('UPDATE lists SET icon_url = ? WHERE id = ?', [
+    result.secure_url,
+    listId,
+  ]);
+
+  return { icon_url: result.secure_url };
 }

@@ -9,8 +9,10 @@ import {
   removeListItem,
   saveList,
   unsaveList,
+  uploadListIcon,
 } from '../controllers/lists.controller';
 import { verifyAccessToken } from '../middleware/auth';
+import { upload } from '../middleware/upload';
 
 const router = Router();
 
@@ -25,5 +27,6 @@ router.post('/:id/items', verifyAccessToken, addListItem);
 router.delete('/:id/items/:itemId', verifyAccessToken, removeListItem);
 router.post('/:id/save', verifyAccessToken, saveList);
 router.delete('/:id/save', verifyAccessToken, unsaveList);
+router.post('/:id/icon', verifyAccessToken, upload.single('icon'), uploadListIcon);
 
 export default router;

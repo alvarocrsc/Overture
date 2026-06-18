@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const createListSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().max(2000).optional(),
+  icon_url: z.string().url().max(500).nullable().optional(),
+  view_mode: z.enum(['posters', 'expanded']).optional().default('posters'),
   is_public: z.boolean().optional().default(true),
   is_ranked: z.boolean().optional().default(false),
 });
@@ -10,6 +12,8 @@ export const createListSchema = z.object({
 export const updateListSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).nullable().optional(),
+  icon_url: z.string().url().max(500).nullable().optional(),
+  view_mode: z.enum(['posters', 'expanded']).optional(),
   is_public: z.boolean().optional(),
   is_ranked: z.boolean().optional(),
 });

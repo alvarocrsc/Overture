@@ -172,9 +172,6 @@ export default function FilmDetailScreen(
         onToggleLogged={handleOpenLogFlow}
         onChangeRating={handleChangeRating}
         onToggleLiked={handleToggleLiked}
-        onAddToList={() => {
-          // Add-to-list flow yet to implement
-        }}
         onChangeAppearance={() => {
           setDrawerVisible(false);
           setAppearanceVisible(true);

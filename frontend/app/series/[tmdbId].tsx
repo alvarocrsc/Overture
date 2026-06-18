@@ -181,9 +181,6 @@ export default function SeriesDetailScreen(
         onToggleLogged={handleOpenLogFlow}
         onChangeRating={handleChangeRating}
         onToggleLiked={handleToggleLiked}
-        onAddToList={() => {
-          // Add-to-list flow lands in a future stage.
-        }}
         onChangeAppearance={() => {
           setDrawerVisible(false);
           setAppearanceVisible(true);

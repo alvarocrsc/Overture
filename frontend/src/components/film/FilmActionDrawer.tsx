@@ -1,21 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ImageBackground,
-  Modal,
-  Pressable,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { BlurView } from 'expo-blur';
-import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'react-native';
+import { Share } from 'react-native';
 
-import { Colors, FontFamily, LetterSpacing, Radius } from '@/src/lib/colors';
 import { backdropUrl, logoUrl } from '@/src/lib/tmdb';
 import type { FilmDetail, FilmImages } from '@/src/types/film.types';
-import InteractiveStarRating from './InteractiveStarRating';
+import BottomDrawer from '@/src/components/drawers/bottom-drawer';
+import MoreOptionsDrawerContent from '@/src/components/drawers/more-options-drawer-content';
+import AddToListDrawerContent from '@/src/components/drawers/add-to-list-drawer-content';
+import CreateListDrawerContent from '@/src/components/drawers/create-list-drawer-content';
+import { useInvalidateLists } from '@/src/hooks/use-lists';
 
 interface FilmActionDrawerProps {
   visible: boolean;
@@ -28,18 +20,20 @@ interface FilmActionDrawerProps {
   onChangeRating: (value: number) => void;
   /** Called when the user toggles the LIKED indicator. */
   onToggleLiked: () => void;
-  /** Called when the user taps "Add to list". */
-  onAddToList: () => void;
   /** Called when the user taps "Change poster | Backdrop". */
   onChangeAppearance: () => void;
 }
 
+type Step = 'more' | 'add-to-list' | 'create-list';
+
 /**
- * Bottom-sheet style modal exposing the per-user actions for a film:
- * logged toggle, rating picker, like toggle, add to list, change poster
- * & backdrop, and share. The blurred film backdrop fills the screen and
- * the title logo (or text fallback) sits between the backdrop and the
- * action sheet.
+ * Per-film action drawer. Orchestrates three steps inside the shared
+ * `BottomDrawer` shell:
+ *
+ * 1. **More options** — logged / rating / liked toggles plus Add to
+ *    list, Change poster | Backdrop and Share actions.
+ * 2. **Add to list** — user's lists with optimistic toggles.
+ * 3. **Create list** — form to create a brand-new list.
  */
 export default function FilmActionDrawer({
   visible,
@@ -49,13 +43,17 @@ export default function FilmActionDrawer({
   onToggleLogged,
   onChangeRating,
   onToggleLiked,
-  onAddToList,
   onChangeAppearance,
 }: FilmActionDrawerProps): React.JSX.Element {
+  const [step, setStep] = useState<Step>('more');
   const [rating, setRating] = useState<number>(film.user_rating ?? 0);
+  const invalidateLists = useInvalidateLists();
 
   useEffect(() => {
-    if (visible) setRating(film.user_rating ?? 0);
+    if (visible) {
+      setStep('more');
+      setRating(film.user_rating ?? 0);
+    }
   }, [visible, film.user_rating]);
 
   const handleRatingChange = (value: number): void => {
@@ -65,277 +63,64 @@ export default function FilmActionDrawer({
 
   const handleShare = async (): Promise<void> => {
     try {
-      await Share.share({
-        message: `${film.title} on Overture`,
-      });
+      await Share.share({ message: `${film.title} on Overture` });
     } catch {
+      // User dismissed share sheet — nothing to do.
     }
   };
 
+  const handleClose = (): void => {
+    if (step === 'add-to-list' || step === 'create-list') {
+      invalidateLists();
+    }
+    onClose();
+  };
+
   const backdropPath = film.custom_backdrop_path ?? film.backdrop_path;
-  const backdropImage = backdropUrl(backdropPath, 'w1280');
+  const backdropImageUri = backdropUrl(backdropPath, 'w1280');
 
   const logo =
     images?.logos.find((l) => l.iso_639_1 === 'en') ?? images?.logos[0];
   const logoSrc = logo ? logoUrl(logo.file_path, 'w300') : null;
 
   return (
-    <Modal
+    <BottomDrawer
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      statusBarTranslucent
+      onClose={handleClose}
+      backdropImageUri={backdropImageUri}
+      logoUri={logoSrc}
+      titleFallback={film.title}
+      tagline={film.tagline ?? null}
+      onDone={handleClose}
+      showDoneButton={step !== 'create-list'}
     >
-      <ImageBackground
-        source={backdropImage ? { uri: backdropImage } : undefined}
-        style={styles.background}
-        resizeMode="cover"
-      >
-        <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={styles.dim} />
-
-        {/* Tap outside to dismiss */}
-        <Pressable style={styles.dismissArea} onPress={onClose}>
-          <View style={styles.titleWrap} pointerEvents="none">
-            {logoSrc ? (
-              <Image
-                source={{ uri: logoSrc }}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            ) : (
-              <Text style={styles.titleFallback} numberOfLines={2}>
-                {film.title}
-              </Text>
-            )}
-            {film.tagline ? (
-              <Text style={styles.tagline}>{film.tagline}</Text>
-            ) : null}
-          </View>
-        </Pressable>
-
-        <View style={styles.sheetContainer}>
-          <View style={styles.sheet}>
-            <View style={styles.dragHandle} />
-
-            {/* Stats row: LOGGED / RATING / LIKED */}
-            <View style={styles.statsRow}>
-              <StatusCell
-                label="LOGGED"
-                active={film.is_logged}
-                onPress={onToggleLogged}
-              >
-                <Ionicons
-                  name={film.is_logged ? 'checkmark-circle' : 'checkmark-circle-outline'}
-                  size={28}
-                  color={film.is_logged ? Colors.accentBlue : Colors.white}
-                />
-              </StatusCell>
-
-              <View style={styles.statCell}>
-                <InteractiveStarRating
-                  value={rating}
-                  onChange={handleRatingChange}
-                  size={22}
-                  gap={2}
-                />
-                <Text style={styles.statLabel}>RATING</Text>
-              </View>
-
-              <StatusCell
-                label="LIKED"
-                active={film.is_liked}
-                onPress={onToggleLiked}
-              >
-                <Ionicons
-                  name={film.is_liked ? 'heart' : 'heart-outline'}
-                  size={28}
-                  color={film.is_liked ? Colors.accentBlue : Colors.white}
-                />
-              </StatusCell>
-            </View>
-
-            <ActionRow label="Add to list" onPress={onAddToList} topDivider />
-            <ActionRow
-              label="Change poster | Backdrop"
-              onPress={onChangeAppearance}
-            />
-            <ActionRow label="Share" onPress={handleShare} topDivider />
-          </View>
-
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-          >
-            <Text style={styles.closeLabel}>Close</Text>
-          </Pressable>
-        </View>
-      </ImageBackground>
-    </Modal>
+      {step === 'more' ? (
+        <MoreOptionsDrawerContent
+          isLogged={film.is_logged}
+          isLiked={film.is_liked}
+          rating={rating}
+          onToggleLogged={onToggleLogged}
+          onChangeRating={handleRatingChange}
+          onToggleLiked={onToggleLiked}
+          onPressAddToList={() => setStep('add-to-list')}
+          onChangeAppearance={onChangeAppearance}
+          onShare={handleShare}
+        />
+      ) : step === 'add-to-list' ? (
+        <AddToListDrawerContent
+          mediaType="film"
+          tmdbId={film.tmdb_id}
+          onBack={() => setStep('more')}
+          onCreateNew={() => setStep('create-list')}
+        />
+      ) : (
+        <CreateListDrawerContent
+          mediaType="film"
+          tmdbId={film.tmdb_id}
+          onBack={() => setStep('add-to-list')}
+          onListCreated={() => setStep('add-to-list')}
+        />
+      )}
+    </BottomDrawer>
   );
 }
-
-interface StatusCellProps {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}
-
-function StatusCell({
-  label,
-  onPress,
-  children,
-}: StatusCellProps): React.JSX.Element {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.statCell, pressed && styles.pressed]}
-      hitSlop={6}
-    >
-      {children}
-      <Text style={styles.statLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-interface ActionRowProps {
-  label: string;
-  onPress: () => void | Promise<void>;
-  topDivider?: boolean;
-}
-
-function ActionRow({
-  label,
-  onPress,
-  topDivider,
-}: ActionRowProps): React.JSX.Element {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionRow,
-        topDivider && styles.actionRowDivider,
-        pressed && styles.pressed,
-      ]}
-    >
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const SHEET_BG = '#242424';
-const DIVIDER = '#121212';
-
-const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  dim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  dismissArea: {
-    flex: 1,
-  },
-  titleWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-  },
-  logo: {
-    width: 240,
-    height: 80,
-  },
-  titleFallback: {
-    fontFamily: FontFamily.black,
-    fontSize: 32,
-    color: Colors.white,
-    letterSpacing: LetterSpacing.tight,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-  },
-  tagline: {
-    marginTop: 6,
-    fontFamily: FontFamily.medium,
-    fontSize: 13,
-    color: Colors.textMuted,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: LetterSpacing.tight,
-  },
-  sheetContainer: {
-    paddingHorizontal: 8,
-    paddingBottom: 28,
-    gap: 8,
-  },
-  sheet: {
-    backgroundColor: SHEET_BG,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  dragHandle: {
-    width: 70,
-    height: 3,
-    borderRadius: Radius.progress,
-    backgroundColor: Colors.white,
-    alignSelf: 'center',
-    marginTop: 13,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 18,
-    paddingBottom: 18,
-  },
-  statCell: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 110,
-    gap: 12,
-  },
-  statLabel: {
-    fontFamily: FontFamily.extraBold,
-    fontSize: 12,
-    color: Colors.white,
-    letterSpacing: LetterSpacing.tight,
-    textTransform: 'uppercase',
-  },
-  actionRow: {
-    height: 45,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionRowDivider: {
-    borderTopWidth: 1.1,
-    borderTopColor: DIVIDER,
-  },
-  actionLabel: {
-    fontFamily: FontFamily.extraBold,
-    fontSize: 14,
-    color: Colors.white,
-    letterSpacing: LetterSpacing.tight,
-  },
-  closeButton: {
-    height: 49,
-    borderRadius: 10,
-    backgroundColor: SHEET_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeLabel: {
-    fontFamily: FontFamily.extraBold,
-    fontSize: 14,
-    color: Colors.white,
-    letterSpacing: LetterSpacing.tight,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-});

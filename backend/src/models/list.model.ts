@@ -3,6 +3,8 @@ export interface List {
   user_id: number;
   title: string;
   description: string | null;
+  icon_url: string | null;
+  view_mode: 'posters' | 'expanded';
   is_ranked: boolean;
   is_public: boolean;
   created_at: Date;

@@ -127,3 +127,25 @@ export async function unsaveList(req: Request, res: Response): Promise<void> {
   await listsService.unsaveList(listId, userId);
   res.status(200).json({ message: 'List unsaved' });
 }
+
+/** POST /api/v1/lists/:id/icon (multipart/form-data, field: `icon`) */
+export async function uploadListIcon(req: Request, res: Response): Promise<void> {
+  const listId = parseId(String(req.params['id']), 'list ID');
+  const userId = req.user!.userId;
+
+  if (!req.file) {
+    throw new AppError('No image file provided', 400);
+  }
+
+  const result = await listsService.uploadListIconService(
+    listId,
+    userId,
+    req.file.buffer,
+    req.file.mimetype,
+  );
+
+  res.status(200).json({
+    data: result,
+    message: 'List icon updated',
+  });
+}
