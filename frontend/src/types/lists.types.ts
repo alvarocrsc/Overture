@@ -9,6 +9,9 @@
 /** How a list renders its items on the detail screen. */
 export type ListViewMode = 'posters' | 'expanded';
 
+/** Discriminates a list item between a film and a series. */
+export type MediaType = 'film' | 'series';
+
 /** A row returned by GET /lists/me — owned + saved lists. */
 export interface ListSummary {
   id: number;
@@ -25,6 +28,8 @@ export interface ListSummary {
   owner_avatar: string | null;
   /** 0 for owned, 1 for saved (read-only). */
   is_saved: 0 | 1;
+  /** Backdrop path of the first list item, used as the cover thumbnail. */
+  cover_backdrop_path: string | null;
 }
 
 /** A single film/series row inside a list's items array. */
@@ -36,11 +41,43 @@ export interface ListItem {
   film_tmdb_id: number | null;
   film_title: string | null;
   film_poster: string | null;
+  film_backdrop: string | null;
+  film_overview: string | null;
   film_release_date: string | null;
+  film_release_year: number | null;
+  film_director: string | null;
+  film_runtime_min: number | null;
   series_tmdb_id: number | null;
   series_title: string | null;
   series_poster: string | null;
+  series_backdrop: string | null;
+  series_overview: string | null;
   series_first_air_date: string | null;
+  series_first_air_year: number | null;
+  series_creator: string | null;
+  series_number_of_seasons: number | null;
+}
+
+/**
+ * A list item flattened across the film/series duality into a single
+ * media-agnostic shape, produced by `normalizeListItem`.
+ */
+export interface NormalizedListItem {
+  /** The list_items row id (stable key). */
+  itemId: number;
+  position: number;
+  mediaType: MediaType;
+  tmdbId: number;
+  title: string;
+  posterPath: string | null;
+  backdropPath: string | null;
+  overview: string | null;
+  /** Release / first-air year as a string, or null when unknown. */
+  year: string | null;
+  /** Director (films) or creator (series), or null when unknown. */
+  directorOrCreator: string | null;
+  /** Runtime in minutes (films) or season count (series), or null. */
+  runtimeOrSeasons: number | null;
 }
 
 /** Full detail returned by GET /lists/:id. */
@@ -57,7 +94,11 @@ export interface ListDetail {
   updated_at: string;
   owner_id: number;
   owner_username: string;
+  owner_name: string | null;
   owner_avatar: string | null;
+  likes_count: number;
+  is_liked: 0 | 1;
+  comments_count: number;
   items: ListItem[];
 }
 

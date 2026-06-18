@@ -84,22 +84,31 @@ export default function CreateListDrawerContent({
     setErrorMessage(null);
     const trimmedDescription = description.trim();
 
+    let newList: ListSummary;
     try {
-      const newList = await create({
+      newList = await create({
         title: trimmedName,
         description: trimmedDescription.length > 0 ? trimmedDescription : undefined,
         is_ranked: isRanked,
         view_mode: viewMode,
       });
-
-      if (iconUri) {
-        await upload({ listId: newList.id, imageUri: iconUri });
-      }
-
-      onListCreated(newList);
     } catch {
       setErrorMessage('Something went wrong creating your list. Please try again.');
+      return;
     }
+
+    // The list now exists. Upload the icon as a best-effort follow-up so a
+    // failed image upload never discards the created list.
+    if (iconUri) {
+      try {
+        await upload({ listId: newList.id, imageUri: iconUri });
+      } catch {
+        setErrorMessage('Your list was created, but the image could not be uploaded.');
+        return;
+      }
+    }
+
+    onListCreated(newList);
   };
 
   return (

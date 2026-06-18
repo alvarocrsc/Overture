@@ -26,6 +26,8 @@ export interface ListSummaryRow {
   owner_username: string;
   owner_avatar: string | null;
   is_saved: number;
+  /** Backdrop path of the first list item — used as a cover image thumbnail. */
+  cover_backdrop_path: string | null;
 }
 
 /** Full list row with owner info, as returned by getListById. */
@@ -42,7 +44,11 @@ export interface ListDetailRow {
   updated_at: Date;
   owner_id: number;
   owner_username: string;
+  owner_name: string | null;
   owner_avatar: string | null;
+  likes_count: number;
+  is_liked: number;
+  comments_count: number;
 }
 
 /** A list_items row joined with film/series data. */
@@ -54,11 +60,21 @@ export interface ListItemRow {
   film_tmdb_id: number | null;
   film_title: string | null;
   film_poster: string | null;
+  film_backdrop: string | null;
+  film_overview: string | null;
   film_release_date: string | null;
+  film_release_year: number | null;
+  film_director: string | null;
+  film_runtime_min: number | null;
   series_tmdb_id: number | null;
   series_title: string | null;
   series_poster: string | null;
+  series_backdrop: string | null;
+  series_overview: string | null;
   series_first_air_date: string | null;
+  series_first_air_year: number | null;
+  series_creator: string | null;
+  series_number_of_seasons: number | null;
 }
 
 /** Minimal list ownership row used for auth checks. */
@@ -145,9 +161,16 @@ export async function getMyLists(
        l.items_count,
        l.created_at,
        l.updated_at,
-       u.username  AS owner_username,
+       u.username   AS owner_username,
        u.avatar_url AS owner_avatar,
-       CASE WHEN l.user_id = ? THEN false ELSE true END AS is_saved
+       CASE WHEN l.user_id = ? THEN false ELSE true END AS is_saved,
+       (SELECT COALESCE(f2.backdrop_path, s2.backdrop_path)
+        FROM list_items li2
+        LEFT JOIN films  f2 ON li2.film_id   = f2.id
+        LEFT JOIN series s2 ON li2.series_id = s2.id
+        WHERE li2.list_id = l.id
+        ORDER BY li2.position ASC, li2.added_at ASC
+        LIMIT 1) AS cover_backdrop_path
      FROM lists l
      JOIN users u ON l.user_id = u.id
      WHERE l.user_id = ? OR l.id IN (
@@ -159,6 +182,51 @@ export async function getMyLists(
   );
 
   return { data: rows, total, page, limit: clampedLimit };
+}
+
+/**
+ * Returns a list of public lists owned by a specific user.
+ * Used for viewing another user's lists from their profile page.
+ *
+ * When the requesting user is the same as the target user this
+ * still only returns public lists — callers should prefer `getMyLists`
+ * if they need private lists too.
+ *
+ * @param targetUserId - The user whose lists are fetched.
+ * @returns An array of public list summaries ordered by last update.
+ */
+export async function getUserLists(
+  targetUserId: number,
+): Promise<ListSummaryRow[]> {
+  const rows = await query<ListSummaryRow>(
+    `SELECT
+       l.id,
+       l.title,
+       l.description,
+       l.icon_url,
+       l.view_mode,
+       l.is_public,
+       l.is_ranked,
+       l.items_count,
+       l.created_at,
+       l.updated_at,
+       u.username   AS owner_username,
+       u.avatar_url AS owner_avatar,
+       0            AS is_saved,
+       (SELECT COALESCE(f2.backdrop_path, s2.backdrop_path)
+        FROM list_items li2
+        LEFT JOIN films  f2 ON li2.film_id   = f2.id
+        LEFT JOIN series s2 ON li2.series_id = s2.id
+        WHERE li2.list_id = l.id
+        ORDER BY li2.position ASC, li2.added_at ASC
+        LIMIT 1) AS cover_backdrop_path
+     FROM lists l
+     JOIN users u ON l.user_id = u.id
+     WHERE l.user_id = ? AND l.is_public = 1
+     ORDER BY l.updated_at DESC`,
+    [targetUserId],
+  );
+  return rows;
 }
 
 /**
@@ -199,7 +267,8 @@ export async function createList(
        l.updated_at,
        u.username   AS owner_username,
        u.avatar_url AS owner_avatar,
-       CASE WHEN l.user_id = ? THEN false ELSE true END AS is_saved
+       CASE WHEN l.user_id = ? THEN false ELSE true END AS is_saved,
+       NULL AS cover_backdrop_path
      FROM lists l
      JOIN users u ON l.user_id = u.id
      WHERE l.id = ?`,
@@ -234,11 +303,19 @@ export async function getListById(
        l.updated_at,
        u.id         AS owner_id,
        u.username   AS owner_username,
-       u.avatar_url AS owner_avatar
+       u.name       AS owner_name,
+       u.avatar_url AS owner_avatar,
+       (SELECT COUNT(*) FROM list_likes ll WHERE ll.list_id = l.id) AS likes_count,
+       EXISTS(
+         SELECT 1 FROM list_likes ll
+         WHERE ll.list_id = l.id AND ll.user_id = ?
+       ) AS is_liked,
+       -- TODO(list-comments): wire up real comment count when list comments ship.
+       0 AS comments_count
      FROM lists l
      JOIN users u ON l.user_id = u.id
      WHERE l.id = ?`,
-    [listId],
+    [requestingUserId ?? 0, listId],
   );
   if (!list) throw new AppError('List not found', 404);
 
@@ -258,11 +335,25 @@ export async function getListById(
        f.tmdb_id        AS film_tmdb_id,
        f.title          AS film_title,
        f.poster_path    AS film_poster,
+       f.backdrop_path  AS film_backdrop,
+       f.overview       AS film_overview,
        f.release_date   AS film_release_date,
+       YEAR(f.release_date) AS film_release_year,
+       (SELECT fc.person_name FROM film_credits fc
+         WHERE fc.film_id = f.id AND fc.role = 'director'
+         ORDER BY fc.id ASC LIMIT 1) AS film_director,
+       f.runtime_min    AS film_runtime_min,
        s.tmdb_id        AS series_tmdb_id,
        s.title          AS series_title,
        s.poster_path    AS series_poster,
-       s.first_air_date AS series_first_air_date
+       s.backdrop_path  AS series_backdrop,
+       s.overview       AS series_overview,
+       s.first_air_date AS series_first_air_date,
+       YEAR(s.first_air_date) AS series_first_air_year,
+       (SELECT sc.person_name FROM series_credits sc
+         WHERE sc.series_id = s.id AND sc.role = 'director'
+         ORDER BY sc.id ASC LIMIT 1) AS series_creator,
+       s.seasons_count  AS series_number_of_seasons
      FROM list_items li
      LEFT JOIN films  f ON li.film_id   = f.id
      LEFT JOIN series s ON li.series_id = s.id
@@ -489,6 +580,46 @@ export async function unsaveList(listId: number, userId: number): Promise<void> 
   await fetchListOrThrow(listId);
   await execute(
     `DELETE FROM saved_lists WHERE user_id = ? AND list_id = ?`,
+    [userId, listId],
+  );
+}
+
+/**
+ * Likes a list on behalf of the authenticated user.
+ * Throws 409 if the user has already liked the list.
+ * @param listId - The list's primary key.
+ * @param userId - The authenticated user's ID.
+ */
+export async function likeList(listId: number, userId: number): Promise<void> {
+  await fetchListOrThrow(listId);
+
+  try {
+    await execute(
+      `INSERT INTO list_likes (user_id, list_id) VALUES (?, ?)`,
+      [userId, listId],
+    );
+  } catch (err: unknown) {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'errno' in err &&
+      (err as { errno: number }).errno === 1062
+    ) {
+      throw new AppError('Already liked', 409);
+    }
+    throw err;
+  }
+}
+
+/**
+ * Removes the authenticated user's like from a list. Idempotent.
+ * @param listId - The list's primary key.
+ * @param userId - The authenticated user's ID.
+ */
+export async function unlikeList(listId: number, userId: number): Promise<void> {
+  await fetchListOrThrow(listId);
+  await execute(
+    `DELETE FROM list_likes WHERE user_id = ? AND list_id = ?`,
     [userId, listId],
   );
 }

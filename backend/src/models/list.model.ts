@@ -19,3 +19,9 @@ export interface ListItem {
   position: number;
   note: string | null;
 }
+
+export interface ListLike {
+  user_id: number;
+  list_id: number;
+  created_at: Date;
+}

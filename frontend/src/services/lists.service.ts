@@ -54,6 +54,16 @@ export async function getMyLists(
 }
 
 /**
+ * Fetches the public lists owned by a specific user.
+ * Used when viewing another user's profile.
+ * @param userId - The target user's internal ID.
+ */
+export async function getUserLists(userId: number): Promise<ListSummary[]> {
+  const res = await api.get<{ data: ListSummary[] }>(`/lists/user/${userId}`);
+  return res.data.data;
+}
+
+/**
  * Fetches a single list with its items.
  * @param listId - Internal list ID.
  */
@@ -86,6 +96,22 @@ export async function removeItemFromList(
   itemId: number,
 ): Promise<void> {
   await api.delete(`/lists/${listId}/items/${itemId}`);
+}
+
+/**
+ * Likes a list on behalf of the authenticated user.
+ * @param listId - Internal list ID.
+ */
+export async function likeList(listId: number): Promise<void> {
+  await api.post(`/lists/${listId}/like`);
+}
+
+/**
+ * Removes the authenticated user's like from a list.
+ * @param listId - Internal list ID.
+ */
+export async function unlikeList(listId: number): Promise<void> {
+  await api.delete(`/lists/${listId}/like`);
 }
 
 /**
@@ -123,7 +149,15 @@ export async function uploadListIcon(
   const res = await api.post<{ data: { icon_url: string }; message: string }>(
     `/lists/${listId}/icon`,
     formData,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
+    {
+      // Let React Native's networking layer set `multipart/form-data` together
+      // with the boundary. Forcing the header here (or inheriting the
+      // instance's JSON default) drops the boundary, which makes multer parse
+      // no file and reject the upload. `transformRequest` keeps the FormData
+      // untouched so axios does not try to serialize it.
+      headers: { 'Content-Type': undefined },
+      transformRequest: (data) => data,
+    },
   );
   return res.data.data.icon_url;
 }

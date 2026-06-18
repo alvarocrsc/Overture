@@ -59,6 +59,13 @@ export async function getMyLists(req: Request, res: Response): Promise<void> {
   res.status(200).json(result);
 }
 
+/** GET /api/v1/lists/user/:userId */
+export async function getListsByUserId(req: Request, res: Response): Promise<void> {
+  const targetUserId = parseId(String(req.params['userId']), 'user ID');
+  const rows = await listsService.getUserLists(targetUserId);
+  res.status(200).json({ data: rows });
+}
+
 /** POST /api/v1/lists */
 export async function createList(req: Request, res: Response): Promise<void> {
   const data = createListSchema.parse(req.body);
@@ -126,6 +133,22 @@ export async function unsaveList(req: Request, res: Response): Promise<void> {
   const userId = req.user!.userId;
   await listsService.unsaveList(listId, userId);
   res.status(200).json({ message: 'List unsaved' });
+}
+
+/** POST /api/v1/lists/:id/like */
+export async function likeList(req: Request, res: Response): Promise<void> {
+  const listId = parseId(String(req.params['id']), 'list ID');
+  const userId = req.user!.userId;
+  await listsService.likeList(listId, userId);
+  res.status(200).json({ message: 'List liked' });
+}
+
+/** DELETE /api/v1/lists/:id/like */
+export async function unlikeList(req: Request, res: Response): Promise<void> {
+  const listId = parseId(String(req.params['id']), 'list ID');
+  const userId = req.user!.userId;
+  await listsService.unlikeList(listId, userId);
+  res.status(200).json({ message: 'List unliked' });
 }
 
 /** POST /api/v1/lists/:id/icon (multipart/form-data, field: `icon`) */

@@ -264,7 +264,14 @@ export default function ProfileView({
           onPressDiary={() => router.push('/(tabs)/stats')}
           onPressWatchlist={() => router.push('/(tabs)/stats')}
           onPressReviews={() => router.push('/(tabs)/stats')}
-          onPressLists={() => router.push('/(tabs)/stats')}
+          onPressLists={() => {
+            if (profileId != null) {
+              router.push({
+                pathname: '/user-lists/[userId]',
+                params: { userId: String(profileId) },
+              });
+            }
+          }}
         />
       </ScrollView>
 

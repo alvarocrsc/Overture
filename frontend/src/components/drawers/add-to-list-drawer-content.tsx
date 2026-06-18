@@ -7,11 +7,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
-import { posterUrl } from '@/src/lib/tmdb';
+import { ListThumbnail } from '@/src/components/lists/ListThumbnail';
+import { normalizeListItems } from '@/src/utils/list-item.utils';
 import {
   useListMembership,
   useToggleListItem,
@@ -127,7 +127,12 @@ function ListRow({ row, disabled, onToggle }: ListRowProps): React.JSX.Element {
       disabled={disabled}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <ListThumbnail detail={detail} />
+      <ListThumbnail
+        iconUrl={list.icon_url}
+        items={detail ? normalizeListItems(detail.items) : []}
+        width={50}
+        borderRadius={3}
+      />
       <View style={styles.rowText}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {list.title}
@@ -152,40 +157,6 @@ function ListRow({ row, disabled, onToggle }: ListRowProps): React.JSX.Element {
         ) : null}
       </View>
     </Pressable>
-  );
-}
-
-/**
- * 50x42 mosaic-style thumbnail. Uses the first item's poster, if any.
- * Falls back to a placeholder block when the list is empty or the
- * detail query hasn't resolved yet.
- *
- * TODO(list-thumbnail): replace with the full collage logic to match
- * the design — 0 items (or icon_url set) → icon_url / placeholder;
- * 1–5 items → first item backdrop; 6+ items → a 2×3 grid of six
- * backdrops cropped at a 87/73 aspect ratio.
- */
-function ListThumbnail({
-  detail,
-}: {
-  detail: import('@/src/services/lists.service').ListDetail | undefined;
-}): React.JSX.Element {
-  const firstPoster = (() => {
-    if (!detail) return null;
-    for (const item of detail.items) {
-      const p = item.film_poster ?? item.series_poster;
-      if (p) return p;
-    }
-    return null;
-  })();
-  const uri = posterUrl(firstPoster, 'w185');
-
-  return (
-    <View style={styles.thumb}>
-      {uri ? (
-        <Image source={{ uri }} style={styles.thumbImage} resizeMode="cover" />
-      ) : null}
-    </View>
   );
 }
 
@@ -263,17 +234,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     paddingHorizontal: 6,
-  },
-  thumb: {
-    width: 50,
-    height: 42,
-    borderRadius: 3,
-    backgroundColor: '#333',
-    overflow: 'hidden',
-  },
-  thumbImage: {
-    width: '100%',
-    height: '100%',
   },
   rowText: {
     flex: 1,

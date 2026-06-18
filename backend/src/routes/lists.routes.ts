@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getMyLists,
+  getListsByUserId,
   createList,
   getListById,
   updateList,
@@ -9,6 +10,8 @@ import {
   removeListItem,
   saveList,
   unsaveList,
+  likeList,
+  unlikeList,
   uploadListIcon,
 } from '../controllers/lists.controller';
 import { verifyAccessToken } from '../middleware/auth';
@@ -16,8 +19,9 @@ import { upload } from '../middleware/upload';
 
 const router = Router();
 
-// /me must be before /:id
+// /me and /user/:userId must be before /:id to avoid param collision.
 router.get('/me', verifyAccessToken, getMyLists);
+router.get('/user/:userId', getListsByUserId);
 
 router.post('/', verifyAccessToken, createList);
 router.get('/:id', getListById);
@@ -27,6 +31,8 @@ router.post('/:id/items', verifyAccessToken, addListItem);
 router.delete('/:id/items/:itemId', verifyAccessToken, removeListItem);
 router.post('/:id/save', verifyAccessToken, saveList);
 router.delete('/:id/save', verifyAccessToken, unsaveList);
+router.post('/:id/like', verifyAccessToken, likeList);
+router.delete('/:id/like', verifyAccessToken, unlikeList);
 router.post('/:id/icon', verifyAccessToken, upload.single('icon'), uploadListIcon);
 
 export default router;
