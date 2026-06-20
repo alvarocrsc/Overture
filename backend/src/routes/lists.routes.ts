@@ -13,6 +13,9 @@ import {
   likeList,
   unlikeList,
   uploadListIcon,
+  getFolderContents,
+  getFolderTree,
+  createFolder,
 } from '../controllers/lists.controller';
 import { verifyAccessToken } from '../middleware/auth';
 import { upload } from '../middleware/upload';
@@ -22,6 +25,11 @@ const router = Router();
 // /me and /user/:userId must be before /:id to avoid param collision.
 router.get('/me', verifyAccessToken, getMyLists);
 router.get('/user/:userId', getListsByUserId);
+
+// Folder routes must be before /:id to avoid param collision.
+router.get('/folder-contents', verifyAccessToken, getFolderContents);
+router.get('/folders/tree', verifyAccessToken, getFolderTree);
+router.post('/folders', verifyAccessToken, createFolder);
 
 router.post('/', verifyAccessToken, createList);
 router.get('/:id', getListById);

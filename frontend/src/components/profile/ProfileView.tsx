@@ -265,6 +265,10 @@ export default function ProfileView({
           onPressWatchlist={() => router.push('/(tabs)/stats')}
           onPressReviews={() => router.push('/(tabs)/stats')}
           onPressLists={() => {
+            if (viewingSelf) {
+              router.push('/lists/me');
+              return;
+            }
             if (profileId != null) {
               router.push({
                 pathname: '/user-lists/[userId]',

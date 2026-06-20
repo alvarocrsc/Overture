@@ -6,6 +6,7 @@ import {
   createListSchema,
   updateListSchema,
   addListItemSchema,
+  createFolderSchema,
 } from '../validators/list.validators';
 import type { AuthPayload } from '../types/auth.types';
 
@@ -72,6 +73,42 @@ export async function createList(req: Request, res: Response): Promise<void> {
   const userId = req.user!.userId;
   const result = await listsService.createList(userId, data);
   res.status(201).json({ data: result, message: 'List created' });
+}
+
+/** GET /api/v1/lists/folder-contents (optional ?folder_id=) */
+export async function getFolderContents(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const rawFolderId = req.query['folder_id'];
+  const folderId =
+    rawFolderId === undefined || rawFolderId === ''
+      ? null
+      : parseId(String(rawFolderId), 'folder ID');
+  const result = await listsService.getFolderContentsService(userId, folderId);
+  res.status(200).json({
+    data: { folders: result.folders, lists: result.lists },
+    currentFolder: result.currentFolder,
+  });
+}
+
+/** GET /api/v1/lists/folders/tree */
+export async function getFolderTree(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const result = await listsService.getFolderTreeService(userId);
+  res
+    .status(200)
+    .json({ data: { folders: result.folders, rootListsCount: result.rootListsCount } });
+}
+
+/** POST /api/v1/lists/folders */
+export async function createFolder(req: Request, res: Response): Promise<void> {
+  const data = createFolderSchema.parse(req.body);
+  const userId = req.user!.userId;
+  const result = await listsService.createFolderService(
+    userId,
+    data.name,
+    data.parent_folder_id ?? null,
+  );
+  res.status(201).json({ data: result, message: 'Folder created' });
 }
 
 /** GET /api/v1/lists/:id */

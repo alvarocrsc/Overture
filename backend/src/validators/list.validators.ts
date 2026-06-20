@@ -16,6 +16,7 @@ export const updateListSchema = z.object({
   view_mode: z.enum(['posters', 'expanded']).optional(),
   is_public: z.boolean().optional(),
   is_ranked: z.boolean().optional(),
+  folder_id: z.number().int().positive().nullable().optional(),
 });
 
 export const addListItemSchema = z.object({
@@ -25,6 +26,12 @@ export const addListItemSchema = z.object({
   note: z.string().max(1000).nullable().optional(),
 });
 
+export const createFolderSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  parent_folder_id: z.number().int().positive().nullable().optional(),
+});
+
 export type CreateListInput = z.infer<typeof createListSchema>;
 export type UpdateListInput = z.infer<typeof updateListSchema>;
 export type AddListItemInput = z.infer<typeof addListItemSchema>;
+export type CreateFolderInput = z.infer<typeof createFolderSchema>;

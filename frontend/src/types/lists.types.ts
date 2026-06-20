@@ -30,6 +30,8 @@ export interface ListSummary {
   is_saved: 0 | 1;
   /** Backdrop path of the first list item, used as the cover thumbnail. */
   cover_backdrop_path: string | null;
+  /** The folder this list sits in, or null when at the root level. */
+  folder_id: number | null;
 }
 
 /** A single film/series row inside a list's items array. */
@@ -117,4 +119,38 @@ export interface CreateListPayload {
   is_public?: boolean;
   is_ranked?: boolean;
   view_mode?: ListViewMode;
+}
+
+/**
+ * A folder that groups a user's lists. Folders nest up to 3 levels deep.
+ * `lists_count` and `subfolders_count` count only direct children.
+ */
+export interface ListFolder {
+  id: number;
+  name: string;
+  parent_folder_id: number | null;
+  depth: number;
+  lists_count: number;
+  subfolders_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * The payload returned by GET /lists/folder-contents — the subfolders and
+ * lists inside a folder, plus the folder itself (null at the root level).
+ */
+export interface FolderContents {
+  folders: ListFolder[];
+  lists: ListSummary[];
+  currentFolder: ListFolder | null;
+}
+
+/**
+ * The payload returned by GET /lists/folders/tree — every folder the user
+ * owns (flat) plus the number of lists sitting at the root level.
+ */
+export interface FolderTreeData {
+  folders: ListFolder[];
+  rootListsCount: number;
 }

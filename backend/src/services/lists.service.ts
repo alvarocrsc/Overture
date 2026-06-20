@@ -6,6 +6,7 @@ import type {
   UpdateListInput,
   AddListItemInput,
 } from '../validators/list.validators';
+import type { ListFolder } from '../models/list.model';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -117,6 +118,45 @@ async function fetchListOrThrow(listId: number): Promise<ListOwnerRow> {
   );
   if (!list) throw new AppError('List not found', 404);
   return list;
+}
+
+/** Maximum allowed folder nesting depth. Root-level folders are depth 1. */
+const MAX_FOLDER_DEPTH = 3;
+
+/**
+ * SELECT fragment that returns a full {@link ListFolder} with its direct
+ * child counts. Dates are cast to strings so they match the model type.
+ */
+const FOLDER_SELECT = `
+  SELECT
+    f.id,
+    f.name,
+    f.parent_folder_id,
+    f.depth,
+    (SELECT COUNT(*) FROM lists l WHERE l.folder_id = f.id) AS lists_count,
+    (SELECT COUNT(*) FROM list_folders sf WHERE sf.parent_folder_id = f.id) AS subfolders_count,
+    CAST(f.created_at AS CHAR) AS created_at,
+    CAST(f.updated_at AS CHAR) AS updated_at
+  FROM list_folders f
+`;
+
+/**
+ * Fetches a folder owned by the user, including direct child counts.
+ * Throws 404 if the folder does not exist or is not owned by the user.
+ * @param folderId - The folder's primary key.
+ * @param userId - The authenticated user's ID.
+ * @returns The folder with its counts.
+ */
+async function fetchFolderForUser(
+  folderId: number,
+  userId: number,
+): Promise<ListFolder> {
+  const [folder] = await query<ListFolder>(
+    `${FOLDER_SELECT} WHERE f.id = ? AND f.user_id = ?`,
+    [folderId, userId],
+  );
+  if (!folder) throw new AppError('Folder not found', 404);
+  return folder;
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +319,129 @@ export async function createList(
 }
 
 /**
+ * Returns the contents of a folder: its direct subfolders and the lists
+ * placed directly inside it. Passing `null` returns the root level (lists
+ * and folders with no parent).
+ *
+ * Folders belong to the user, so the lists returned are always owned by the
+ * user and never "saved" copies — is_saved is therefore always 0.
+ *
+ * @param userId - The authenticated user's ID.
+ * @param folderId - The folder to open, or null for the root level.
+ * @returns The subfolders, lists, and the current folder (null at root).
+ */
+export async function getFolderContentsService(
+  userId: number,
+  folderId: number | null,
+): Promise<{
+  folders: ListFolder[];
+  lists: ListSummaryRow[];
+  currentFolder: ListFolder | null;
+}> {
+  const currentFolder =
+    folderId === null ? null : await fetchFolderForUser(folderId, userId);
+
+  const folders = await query<ListFolder>(
+    `${FOLDER_SELECT}
+     WHERE f.user_id = ? AND f.parent_folder_id <=> ?
+     ORDER BY f.created_at ASC`,
+    [userId, folderId],
+  );
+
+  const lists = await query<ListSummaryRow>(
+    `SELECT
+       l.id,
+       l.title,
+       l.description,
+       l.icon_url,
+       l.view_mode,
+       l.is_public,
+       l.is_ranked,
+       l.items_count,
+       l.created_at,
+       l.updated_at,
+       u.username   AS owner_username,
+       u.avatar_url AS owner_avatar,
+       false AS is_saved,
+       (SELECT COALESCE(f2.backdrop_path, s2.backdrop_path)
+        FROM list_items li2
+        LEFT JOIN films  f2 ON li2.film_id   = f2.id
+        LEFT JOIN series s2 ON li2.series_id = s2.id
+        WHERE li2.list_id = l.id
+        ORDER BY li2.position ASC, li2.added_at ASC
+        LIMIT 1) AS cover_backdrop_path
+     FROM lists l
+     JOIN users u ON l.user_id = u.id
+     WHERE l.user_id = ? AND l.folder_id <=> ?
+     ORDER BY l.created_at ASC`,
+    [userId, folderId],
+  );
+
+  return { folders, lists, currentFolder };
+}
+
+/**
+ * Returns every folder the user owns (flat) plus the number of lists that
+ * sit at the root level (no folder). Used to render the move-to-folder tree.
+ * @param userId - The authenticated user's ID.
+ * @returns All folders flat and the root list count.
+ */
+export async function getFolderTreeService(
+  userId: number,
+): Promise<{ folders: ListFolder[]; rootListsCount: number }> {
+  const folders = await query<ListFolder>(
+    `${FOLDER_SELECT}
+     WHERE f.user_id = ?
+     ORDER BY f.created_at ASC`,
+    [userId],
+  );
+
+  const [countRow] = await query<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM lists WHERE user_id = ? AND folder_id IS NULL`,
+    [userId],
+  );
+  // COUNT(*) always returns a row — non-null assertion is safe.
+  const rootListsCount = countRow!.total;
+
+  return { folders, rootListsCount };
+}
+
+/**
+ * Creates a folder for the user. Root folders are depth 1; nesting is capped
+ * at {@link MAX_FOLDER_DEPTH} levels.
+ * @param userId - The authenticated user's ID.
+ * @param name - The folder name (already trimmed/validated).
+ * @param parentFolderId - The parent folder, or null for a root folder.
+ * @returns The newly created folder.
+ */
+export async function createFolderService(
+  userId: number,
+  name: string,
+  parentFolderId: number | null,
+): Promise<ListFolder> {
+  let depth = 1;
+  if (parentFolderId !== null) {
+    const parent = await fetchFolderForUser(parentFolderId, userId);
+    depth = parent.depth + 1;
+    if (depth > MAX_FOLDER_DEPTH) {
+      throw new AppError(
+        `Maximum folder nesting depth (${MAX_FOLDER_DEPTH}) exceeded`,
+        400,
+      );
+    }
+  }
+
+  const result = await execute(
+    `INSERT INTO list_folders (user_id, parent_folder_id, name, depth)
+     VALUES (?, ?, ?, ?)`,
+    [userId, parentFolderId, name, depth],
+  );
+
+  // The row was just inserted — it is guaranteed to exist.
+  return fetchFolderForUser(result.insertId, userId);
+}
+
+/**
  * Fetches a list's metadata and items.
  * Private lists are visible only to their owner; others receive a 404.
  * @param listId - The list's primary key.
@@ -407,6 +570,14 @@ export async function updateList(
   if (data.is_ranked !== undefined) {
     setClauses.push('is_ranked = ?');
     params.push(data.is_ranked ? 1 : 0);
+  }
+  if ('folder_id' in data) {
+    // Verify the user owns the target folder before moving the list into it.
+    if (data.folder_id != null) {
+      await fetchFolderForUser(data.folder_id, userId);
+    }
+    setClauses.push('folder_id = ?');
+    params.push(data.folder_id ?? null);
   }
 
   if (setClauses.length > 0) {

@@ -23,16 +23,24 @@ import {
 import { useAuth } from '@/src/context/AuthContext';
 import {
   addItemToList,
+  createFolder,
   createList,
+  deleteList,
+  fetchFolderContents,
+  fetchFolderTree,
   getListById,
   getMyLists,
   getUserLists,
   likeList,
+  moveListToFolder,
   removeItemFromList,
   unlikeList,
   uploadListIcon,
   type CreateListPayload,
+  type FolderContents,
+  type FolderTreeData,
   type ListDetail,
+  type ListFolder,
   type ListItem,
   type ListSummary,
 } from '@/src/services/lists.service';
@@ -47,6 +55,13 @@ export const listDetailKey = (listId: number): readonly unknown[] =>
 /** Query key for another user's public lists. */
 export const userListsKey = (userId: number) =>
   ['lists', 'user', userId] as const;
+
+/** Query key for the contents of a folder (null = root level). */
+export const folderContentsKey = (folderId: number | null) =>
+  ['lists', 'folder-contents', folderId] as const;
+
+/** Query key for the user's full folder tree. */
+export const FOLDER_TREE_KEY = ['lists', 'folder-tree'] as const;
 
 /** Loads the user's lists (owned + saved). Disabled when signed out. */
 export function useMyLists(): UseQueryResult<ListSummary[]> {
@@ -393,4 +408,103 @@ export function useInvalidateLists(): () => void {
     void qc.invalidateQueries({ queryKey: MY_LISTS_KEY });
     void qc.invalidateQueries({ queryKey: ['list'] });
   };
+}
+
+/**
+ * Loads the contents (subfolders + lists) of a folder. Passing `null`
+ * loads the root level. Disabled when signed out.
+ * @param folderId - The folder to open, or null for the root level.
+ */
+export function useFolderContents(
+  folderId: number | null,
+): UseQueryResult<FolderContents> {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: folderContentsKey(folderId),
+    queryFn: () => fetchFolderContents(folderId),
+    enabled: !!user,
+    staleTime: 30 * 1000,
+  });
+}
+
+/** Loads the user's full folder tree (flat) + root list count. */
+export function useFolderTree(): UseQueryResult<FolderTreeData> {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: FOLDER_TREE_KEY,
+    queryFn: () => fetchFolderTree(),
+    enabled: !!user,
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Creates a folder. Invalidates the affected folder-contents view and the
+ * folder tree so the new folder appears immediately.
+ */
+export function useCreateFolder(): {
+  create: (args: {
+    name: string;
+    parentFolderId: number | null;
+  }) => Promise<ListFolder>;
+  isPending: boolean;
+} {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (args: {
+      name: string;
+      parentFolderId: number | null;
+    }): Promise<ListFolder> => createFolder(args.name, args.parentFolderId),
+    onSuccess: (_folder, args) => {
+      void qc.invalidateQueries({
+        queryKey: folderContentsKey(args.parentFolderId),
+      });
+      void qc.invalidateQueries({ queryKey: FOLDER_TREE_KEY });
+    },
+  });
+  return { create: mut.mutateAsync, isPending: mut.isPending };
+}
+
+/**
+ * Moves a list into a folder (or back to the root when `folderId` is null).
+ * Invalidates every folder-contents view, the folder tree, and the flat
+ * lists summary so the list disappears from its old location.
+ */
+export function useMoveListToFolder(): {
+  move: (args: { listId: number; folderId: number | null }) => Promise<void>;
+  isPending: boolean;
+} {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (args: {
+      listId: number;
+      folderId: number | null;
+    }): Promise<void> => moveListToFolder(args.listId, args.folderId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['lists', 'folder-contents'] });
+      void qc.invalidateQueries({ queryKey: FOLDER_TREE_KEY });
+      void qc.invalidateQueries({ queryKey: MY_LISTS_KEY });
+    },
+  });
+  return { move: mut.mutateAsync, isPending: mut.isPending };
+}
+
+/**
+ * Deletes a list. Invalidates every folder-contents view and the flat
+ * lists summary so the deleted list disappears everywhere.
+ */
+export function useDeleteList(): {
+  remove: (listId: number) => Promise<void>;
+  isPending: boolean;
+} {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (listId: number): Promise<void> => deleteList(listId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['lists', 'folder-contents'] });
+      void qc.invalidateQueries({ queryKey: FOLDER_TREE_KEY });
+      void qc.invalidateQueries({ queryKey: MY_LISTS_KEY });
+    },
+  });
+  return { remove: mut.mutateAsync, isPending: mut.isPending };
 }

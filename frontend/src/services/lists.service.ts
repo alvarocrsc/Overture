@@ -9,7 +9,10 @@ import api from '@/src/lib/api';
 import type {
   AddListItemPayload,
   CreateListPayload,
+  FolderContents,
+  FolderTreeData,
   ListDetail,
+  ListFolder,
   ListSummary,
 } from '@/src/types/lists.types';
 
@@ -17,7 +20,10 @@ import type {
 export type {
   AddListItemPayload,
   CreateListPayload,
+  FolderContents,
+  FolderTreeData,
   ListDetail,
+  ListFolder,
   ListItem,
   ListSummary,
   ListViewMode,
@@ -160,4 +166,71 @@ export async function uploadListIcon(
     },
   );
   return res.data.data.icon_url;
+}
+
+/**
+ * Fetches the contents (subfolders + lists) of a folder.
+ * @param folderId - The folder to open, or null for the root level.
+ */
+export async function fetchFolderContents(
+  folderId: number | null,
+): Promise<FolderContents> {
+  const res = await api.get<{
+    data: { folders: ListFolder[]; lists: ListSummary[] };
+    currentFolder: ListFolder | null;
+  }>('/lists/folder-contents', {
+    params: folderId === null ? {} : { folder_id: folderId },
+  });
+  return {
+    folders: res.data.data.folders,
+    lists: res.data.data.lists,
+    currentFolder: res.data.currentFolder,
+  };
+}
+
+/**
+ * Fetches the user's full folder tree (flat) plus the root-level list count.
+ * Used to render the move-to-folder picker.
+ */
+export async function fetchFolderTree(): Promise<FolderTreeData> {
+  const res = await api.get<{ data: FolderTreeData }>('/lists/folders/tree');
+  return res.data.data;
+}
+
+/**
+ * Creates a folder owned by the authenticated user.
+ * @param name - The folder name.
+ * @param parentFolderId - The parent folder, or null for a root folder.
+ * @returns The newly created folder.
+ */
+export async function createFolder(
+  name: string,
+  parentFolderId: number | null,
+): Promise<ListFolder> {
+  const res = await api.post<{ data: ListFolder; message: string }>(
+    '/lists/folders',
+    { name, parent_folder_id: parentFolderId },
+  );
+  return res.data.data;
+}
+
+/**
+ * Moves a list into a folder (or back to the root level when `folderId` is
+ * null). Implemented via the list update endpoint.
+ * @param listId - Internal list ID.
+ * @param folderId - The destination folder, or null for the root level.
+ */
+export async function moveListToFolder(
+  listId: number,
+  folderId: number | null,
+): Promise<void> {
+  await api.put(`/lists/${listId}`, { folder_id: folderId });
+}
+
+/**
+ * Deletes a list owned by the authenticated user.
+ * @param listId - Internal list ID.
+ */
+export async function deleteList(listId: number): Promise<void> {
+  await api.delete(`/lists/${listId}`);
 }
