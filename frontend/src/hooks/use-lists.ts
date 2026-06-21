@@ -33,8 +33,10 @@ import {
   getUserLists,
   likeList,
   moveListToFolder,
+  pinList,
   removeItemFromList,
   unlikeList,
+  unpinList,
   uploadListIcon,
   type CreateListPayload,
   type FolderContents,
@@ -487,6 +489,43 @@ export function useMoveListToFolder(): {
     },
   });
   return { move: mut.mutateAsync, isPending: mut.isPending };
+}
+
+/**
+ * Pins a list inside its current folder. Invalidates the folder-contents
+ * view the list lives in so the re-ordered list appears immediately.
+ * @param folderId - The folder the list lives in (null = root).
+ */
+export function usePinList(folderId: number | null): {
+  pin: (listId: number) => Promise<void>;
+  isPending: boolean;
+} {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (listId: number): Promise<void> => pinList(listId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: folderContentsKey(folderId) });
+    },
+  });
+  return { pin: mut.mutateAsync, isPending: mut.isPending };
+}
+
+/**
+ * Removes the pin from a list. Invalidates the same folder-contents view.
+ * @param folderId - The folder the list lives in (null = root).
+ */
+export function useUnpinList(folderId: number | null): {
+  unpin: (listId: number) => Promise<void>;
+  isPending: boolean;
+} {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (listId: number): Promise<void> => unpinList(listId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: folderContentsKey(folderId) });
+    },
+  });
+  return { unpin: mut.mutateAsync, isPending: mut.isPending };
 }
 
 /**

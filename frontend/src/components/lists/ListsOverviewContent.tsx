@@ -23,6 +23,8 @@ import {
 } from '@/src/lib/colors';
 import {
   useDeleteList,
+  usePinList,
+  useUnpinList,
   useFolderContents,
 } from '@/src/hooks/use-lists';
 import { SwipeableListRow } from '@/src/components/lists/SwipeableListRow';
@@ -66,13 +68,15 @@ export default function ListsOverviewContent({
 
   const { data, isLoading } = useFolderContents(folderId);
   const { remove } = useDeleteList();
+  const { pin } = usePinList(folderId);
+  const { unpin } = useUnpinList(folderId);
 
   const lists = data?.lists ?? [];
   const folders = data?.folders ?? [];
   const currentFolder = data?.currentFolder ?? null;
 
-  // Only one swipe row may be open at a time.
-  const [openRowId, setOpenRowId] = useState<number | null>(null);
+  // openRow tracks which row is open and which direction (left = actions, right = pin).
+  const [openRow, setOpenRow] = useState<{ id: number; side: 'left' | 'right' } | null>(null);
   // Drawer visibility / targets.
   const [createListVisible, setCreateListVisible] = useState(false);
   const [folderInputVisible, setFolderInputVisible] = useState(false);
@@ -89,7 +93,7 @@ export default function ListsOverviewContent({
   };
 
   const handleShare = (list: ListSummary): void => {
-    setOpenRowId(null);
+    setOpenRow(null);
     // TODO: replace with a real shareable deep link once list URLs exist.
     void Share.share({
       message: `Check out the list "${list.title}" on Overture`,
@@ -97,12 +101,12 @@ export default function ListsOverviewContent({
   };
 
   const handleMove = (list: ListSummary): void => {
-    setOpenRowId(null);
+    setOpenRow(null);
     setMoveTarget(list);
   };
 
   const handleDelete = (list: ListSummary): void => {
-    setOpenRowId(null);
+    setOpenRow(null);
     Alert.alert('Delete list?', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -113,6 +117,15 @@ export default function ListsOverviewContent({
         },
       },
     ]);
+  };
+
+  const handlePin = (list: ListSummary): void => {
+    setOpenRow(null);
+    if (list.pin_order !== null) {
+      void unpin(list.id);
+    } else {
+      void pin(list.id);
+    }
   };
 
   const renderRow = ({ item }: { item: OverviewRow }): React.JSX.Element => {
@@ -128,14 +141,14 @@ export default function ListsOverviewContent({
     const { list } = item;
     return (
       <SwipeableListRow
-        isOpen={openRowId === list.id}
-        onOpen={() => setOpenRowId(list.id)}
-        onClose={() =>
-          setOpenRowId((prev) => (prev === list.id ? null : prev))
-        }
+        openSide={openRow?.id === list.id ? openRow.side : null}
+        onOpenLeft={() => setOpenRow({ id: list.id, side: 'left' })}
+        onOpenRight={() => setOpenRow({ id: list.id, side: 'right' })}
+        onClose={() => setOpenRow((prev) => (prev?.id === list.id ? null : prev))}
         onSharePress={() => handleShare(list)}
         onMovePress={() => handleMove(list)}
         onDeletePress={() => handleDelete(list)}
+        onPinPress={() => handlePin(list)}
       >
         <ListRowItem
           list={list}
@@ -184,8 +197,8 @@ export default function ListsOverviewContent({
         <Ionicons name="chevron-back" size={24} color={Colors.white} />
       </Pressable>
 
-      {/* Title */}
-      <Text style={[styles.title, { top: insets.top + TITLE_TOP - 34 }]} numberOfLines={1}>
+      {/* Title — vertically aligned with the back button (both at insets.top + 10). */}
+      <Text style={[styles.title, { top: insets.top + 5}]} numberOfLines={1}>
         {currentFolder?.name ?? 'Lists'}
       </Text>
 
@@ -208,7 +221,7 @@ export default function ListsOverviewContent({
           ListHeaderComponentStyle={styles.listHeader}
           contentContainerStyle={[
             styles.listContent,
-            { paddingTop: insets.top + TITLE_TOP + 24, paddingBottom },
+            { paddingTop: insets.top + 56, paddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
         />

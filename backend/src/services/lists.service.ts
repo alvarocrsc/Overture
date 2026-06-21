@@ -133,6 +133,7 @@ const FOLDER_SELECT = `
     f.name,
     f.parent_folder_id,
     f.depth,
+    f.pin_order,
     (SELECT COUNT(*) FROM lists l WHERE l.folder_id = f.id) AS lists_count,
     (SELECT COUNT(*) FROM list_folders sf WHERE sf.parent_folder_id = f.id) AS subfolders_count,
     CAST(f.created_at AS CHAR) AS created_at,
@@ -344,7 +345,7 @@ export async function getFolderContentsService(
   const folders = await query<ListFolder>(
     `${FOLDER_SELECT}
      WHERE f.user_id = ? AND f.parent_folder_id <=> ?
-     ORDER BY f.created_at ASC`,
+     ORDER BY f.pin_order ASC, f.created_at ASC`,
     [userId, folderId],
   );
 
@@ -360,6 +361,7 @@ export async function getFolderContentsService(
        l.items_count,
        l.created_at,
        l.updated_at,
+       l.pin_order,
        u.username   AS owner_username,
        u.avatar_url AS owner_avatar,
        false AS is_saved,
@@ -373,11 +375,49 @@ export async function getFolderContentsService(
      FROM lists l
      JOIN users u ON l.user_id = u.id
      WHERE l.user_id = ? AND l.folder_id <=> ?
-     ORDER BY l.created_at ASC`,
+     ORDER BY l.pin_order ASC, l.created_at ASC`,
     [userId, folderId],
   );
 
   return { folders, lists, currentFolder };
+}
+
+/**
+ * Pins a list inside its current folder (or root) for the given user.
+ * Sets `pin_order = UNIX_TIMESTAMP()` on the target list so newly-pinned
+ * items sort above older pins (ascending order means lower = higher up,
+ * so we use a monotonically increasing epoch value which puts the most
+ * recently pinned item first within the pinned group).
+ * @param userId - The authenticated user's ID.
+ * @param listId - The list to pin.
+ */
+export async function pinListService(
+  userId: number,
+  listId: number,
+): Promise<void> {
+  const list = await fetchListOrThrow(listId);
+  if (list.user_id !== userId) throw new AppError('Forbidden', 403);
+  await execute(
+    `UPDATE lists SET pin_order = UNIX_TIMESTAMP() WHERE id = ?`,
+    [listId],
+  );
+}
+
+/**
+ * Removes the pin from a list.
+ * @param userId - The authenticated user's ID.
+ * @param listId - The list to unpin.
+ */
+export async function unpinListService(
+  userId: number,
+  listId: number,
+): Promise<void> {
+  const list = await fetchListOrThrow(listId);
+  if (list.user_id !== userId) throw new AppError('Forbidden', 403);
+  await execute(
+    `UPDATE lists SET pin_order = NULL WHERE id = ?`,
+    [listId],
+  );
 }
 
 /**

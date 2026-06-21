@@ -32,6 +32,8 @@ export interface ListSummary {
   cover_backdrop_path: string | null;
   /** The folder this list sits in, or null when at the root level. */
   folder_id: number | null;
+  /** Non-null when pinned inside its folder; lower value = higher in the list. */
+  pin_order: number | null;
 }
 
 /** A single film/series row inside a list's items array. */
@@ -130,6 +132,8 @@ export interface ListFolder {
   name: string;
   parent_folder_id: number | null;
   depth: number;
+  /** Non-null when pinned inside its parent; lower value = higher in the list. */
+  pin_order: number | null;
   lists_count: number;
   subfolders_count: number;
   created_at: string;

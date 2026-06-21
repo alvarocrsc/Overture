@@ -1,10 +1,14 @@
 import React, { useEffect } from 'react';
+import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Extrapolation,
+  interpolate,
   runOnJS,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
@@ -12,90 +16,370 @@ import Animated, {
 import { Colors, FontFamily } from '@/src/lib/colors';
 
 // ---------------------------------------------------------------------------
-// Layout
+// Layout — sourced from Figma "Lists list Extended (Dark)" (node 1403:114).
 // ---------------------------------------------------------------------------
-/** Width of a single revealed action button. */
-const ACTION_WIDTH = 68;
-/** Number of action buttons (Share / Move / Delete). */
-const ACTION_COUNT = 3;
-/** Total width revealed when the row is fully open. */
-const ACTIONS_WIDTH = ACTION_WIDTH * ACTION_COUNT;
 
-/** Per-action accent colors. Move uses an indigo not present in the tokens. */
-const SHARE_COLOR = Colors.accentBlue;
-const MOVE_COLOR = '#5b5bd6';
-const DELETE_COLOR = Colors.errorRed;
+/** How far the content shifts left when the actions are revealed. */
+const REVEAL_LEFT = 49;
+/**
+ * How far the content shifts right when the Pin pill is revealed.
+ * PIN_LEFT (8) + PILL_W (48) + right-gap (8) = 64.
+ */
+const REVEAL_RIGHT = 64;
+/** Pill button width. */
+const PILL_W = 48;
+/** Pill button height in resting state (Figma: 28px). */
+const PILL_H = 28;
+/** Full row height — also the maximum pill height during over-drag. */
+const ROW_H = 42;
+const PILL_H_MAX = ROW_H;
+/** Gap between pill bottom and label top. */
+const LABEL_MARGIN_TOP = 2;
+/** Gap between action pills (Figma: 10px). */
+const BTN_GAP = 10;
 
+/** Distance from the container's right edge for each pill (derived from Figma). */
+const DELETE_RIGHT = 0;
+const MOVE_RIGHT = PILL_W + BTN_GAP;       // 58
+const SHARE_RIGHT = (PILL_W + BTN_GAP) * 2; // 116
+
+/** Pill colours from Figma. */
+const SHARE_COLOR = '#1a77da';
+const MOVE_COLOR  = '#797aff';
+const DELETE_COLOR = '#e24b4a';
+
+/** Spring for slide and over-drag snap-back. */
 const SPRING = { damping: 40, stiffness: 320 } as const;
 
+// --------------- Left over-drag rubber-band constants ----------------------
+/** Dampening factor past a reveal limit (lower = more resistance). */
+const RUBBER_BAND = 0.3;
+/** Actual (dampened) px of left over-drag at which left pills reach PILL_H_MAX. */
+const GROW_THRESHOLD = 18;
+/** Extra actual px past GROW_THRESHOLD before left pills reach maximum spread. */
+const SEPARATE_EXTRA = 20;
+/** Maximum extra gap (px) added between pills during the separation phase. */
+const SEPARATE_SPREAD = 26;
+/** Maximum icon scale multiplier at full growth. */
+const ICON_SCALE_MAX = 1.3;
+
+// --------------- Pin / right-swipe constants -------------------------------
+/** Colour for the Pin pill — matches iOS Notes orange. */
+const PIN_COLOR = '#f7961d';
+/** Left-edge offset of the Pin cell from the container's left edge. */
+const PIN_LEFT = 8;
+/** Gap kept between the pill's right edge and the list thumbnail. */
+const THUMB_GAP = 8;
+/**
+ * Raw user-input px past REVEAL_RIGHT at which the haptic fires and
+ * stronger resistance kicks in.  On release past this point the pin
+ * action triggers automatically.
+ */
+const ELONGATE_RAW_TRIGGER = 100;
+/** Heavier resistance factor for phase 2 (past haptic threshold). */
+const RUBBER_BAND_ELONGATE = 0.12;
+/** Absolute maximum pill width (safety cap — should never be visible). */
+const PIN_W_MAX = 300;
+
+// ---------------------------------------------------------------------------
+// Custom SVG icons — paths taken verbatim from assets/icons/*.svg
+// ---------------------------------------------------------------------------
+
+/** Upload arrow icon (used for the Share action). */
+function UploadIcon(): React.JSX.Element {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M9.00001 11.8125C9.31066 11.8125 9.56251 11.5606 9.56251 11.25V3.02058L10.823 4.49107C11.0251 4.72694 11.3802 4.75426 11.6161 4.55208C11.852 4.34991 11.8793 3.9948 11.6771 3.75893L9.42706 1.13393C9.32026 1.00925 9.16419 0.9375 9.00001 0.9375C8.83584 0.9375 8.67976 1.00925 8.57296 1.13393L6.32293 3.75893C6.12075 3.9948 6.14807 4.34991 6.38394 4.55208C6.61981 4.75426 6.97492 4.72694 7.17709 4.49107L8.43751 3.02058V11.25C8.43751 11.5606 8.68936 11.8125 9.00001 11.8125Z"
+        fill="white"
+      />
+      <Path
+        d="M12 6.75C11.4733 6.75 11.21 6.75 11.0209 6.87638C10.939 6.93111 10.8686 7.00144 10.8139 7.08334C10.6875 7.2725 10.6875 7.53585 10.6875 8.0625V11.25C10.6875 12.182 9.93202 12.9375 9 12.9375C8.06805 12.9375 7.31253 12.182 7.31253 11.25V8.0625C7.31253 7.53585 7.31253 7.27248 7.18612 7.0833C7.1314 7.00142 7.06111 6.93112 6.97923 6.87641C6.79006 6.75 6.5267 6.75 6 6.75C3.87868 6.75 2.81802 6.75 2.15901 7.40901C1.5 8.06805 1.5 9.12855 1.5 11.2499V11.9999C1.5 14.1212 1.5 15.1818 2.15901 15.8408C2.81802 16.4999 3.87868 16.4999 6 16.4999H12C14.1213 16.4999 15.1819 16.4999 15.841 15.8408C16.5 15.1818 16.5 14.1212 16.5 11.9999V11.2499C16.5 9.12855 16.5 8.06805 15.841 7.40901C15.1819 6.75 14.1213 6.75 12 6.75Z"
+        fill="white"
+      />
+    </Svg>
+  );
+}
+
+/** Folder icon (used for the Move action). */
+function FolderIcon(): React.JSX.Element {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M1.55201 3.94379C1.5 4.21946 1.5 4.55042 1.5 5.21231V10.5C1.5 13.3284 1.5 14.7427 2.37868 15.6213C3.25736 16.5 4.67157 16.5 7.5 16.5H10.5C13.3284 16.5 14.7427 16.5 15.6213 15.6213C16.5 14.7427 16.5 13.3284 16.5 10.5V8.84842C16.5 6.87416 16.5 5.88701 15.9229 5.24537C15.8699 5.18636 15.8137 5.13018 15.7547 5.0771C15.113 4.5 14.1259 4.5 12.1516 4.5H11.8713C11.006 4.5 10.5734 4.5 10.1703 4.38508C9.94883 4.32195 9.7353 4.23353 9.53408 4.12157C9.16778 3.91775 8.86185 3.61184 8.25 3L7.83728 2.58731C7.63223 2.38225 7.5297 2.27971 7.42196 2.19038C6.95739 1.80528 6.38749 1.56922 5.78668 1.51303C5.64732 1.5 5.50232 1.5 5.21231 1.5C4.55042 1.5 4.21946 1.5 3.94379 1.55201C2.73023 1.78098 1.78098 2.73023 1.55201 3.94379ZM9.1875 7.5C9.1875 7.18934 9.43935 6.9375 9.75 6.9375H13.5C13.8107 6.9375 14.0625 7.18934 14.0625 7.5C14.0625 7.81065 13.8107 8.0625 13.5 8.0625H9.75C9.43935 8.0625 9.1875 7.81065 9.1875 7.5Z"
+        fill="white"
+      />
+    </Svg>
+  );
+}
+
+/** Trash-bin icon (used for the Delete action). */
+function TrashIcon(): React.JSX.Element {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+      <Path
+        d="M2.25 4.78948C2.25 4.42614 2.50903 4.13159 2.82857 4.13159L4.82675 4.13124C5.22376 4.1198 5.57402 3.83275 5.70911 3.40809C5.71266 3.39692 5.71674 3.38315 5.73139 3.33318L5.81749 3.03942C5.87017 2.85931 5.91607 2.70239 5.98031 2.56213C6.23407 2.00802 6.70356 1.62324 7.2461 1.52473C7.38343 1.49979 7.52887 1.4999 7.69582 1.50002H10.3043C10.4713 1.4999 10.6167 1.49979 10.754 1.52473C11.2966 1.62324 11.7661 2.00802 12.0198 2.56213C12.0841 2.70239 12.13 2.85931 12.1826 3.03942L12.2687 3.33318C12.2833 3.38315 12.2875 3.39692 12.291 3.40809C12.4262 3.83275 12.8459 4.12015 13.2428 4.13159H15.1714C15.4909 4.13159 15.75 4.42614 15.75 4.78948C15.75 5.15282 15.4909 5.44737 15.1714 5.44737H2.82857C2.50903 5.44737 2.25 5.15282 2.25 4.78948Z"
+        fill="white"
+      />
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M8.6967 16.5001H9.3033C11.3903 16.5001 12.4339 16.5001 13.1123 15.8356C13.7909 15.1712 13.8602 14.0813 13.9991 11.9014L14.1991 8.76052C14.2745 7.57777 14.3121 6.98643 13.9717 6.61168C13.6313 6.23694 13.0565 6.23694 11.907 6.23694H6.09303C4.94345 6.23694 4.36866 6.23694 4.02829 6.61168C3.68791 6.98643 3.72558 7.57777 3.80091 8.76052L4.00094 11.9014C4.13977 14.0813 4.20919 15.1712 4.88767 15.8356C5.56615 16.5001 6.60967 16.5001 8.6967 16.5001ZM7.68472 9.14145C7.65382 8.8161 7.37815 8.57865 7.06903 8.6112C6.75991 8.64375 6.53438 8.93392 6.56529 9.25927L6.94029 13.2067C6.9712 13.532 7.24685 13.7695 7.55595 13.7369C7.8651 13.7044 8.09062 13.4142 8.05972 13.0888L7.68472 9.14145ZM10.931 8.6112C11.2401 8.64375 11.4656 8.93392 11.4347 9.25927L11.0597 13.2067C11.0288 13.532 10.7531 13.7695 10.444 13.7369C10.1349 13.7044 9.90938 13.4142 9.94028 13.0888L10.3153 9.14145C10.3462 8.8161 10.6219 8.57865 10.931 8.6112Z"
+        fill="white"
+      />
+    </Svg>
+  );
+}
+
+/** Location-pin icon (used for the Pin action). */
+function PinIcon(): React.JSX.Element {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M9 1.5C6.515 1.5 4.5 3.515 4.5 6C4.5 9.75 9 16.5 9 16.5C9 16.5 13.5 9.75 13.5 6C13.5 3.515 11.485 1.5 9 1.5ZM9 7.875C7.964 7.875 7.125 7.036 7.125 6C7.125 4.964 7.964 4.125 9 4.125C10.036 4.125 10.875 4.964 10.875 6C10.875 7.036 10.036 7.875 9 7.875Z"
+        fill="white"
+      />
+    </Svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 interface SwipeableListRowProps {
-  /** Whether this row is the currently-open row (only one opens at a time). */
-  isOpen: boolean;
+  /**
+   * Which side is currently revealed, or null if closed.
+   * 'left'  → Share / Move / Delete actions visible.
+   * 'right' → Pin action visible.
+   */
+  openSide: 'left' | 'right' | null;
   /** Called when a left-swipe settles into the open position. */
-  onOpen: () => void;
-  /** Called when the row settles back closed. */
+  onOpenLeft: () => void;
+  /** Called when a right-swipe (Pin) settles into the open position. */
+  onOpenRight: () => void;
+  /** Called when the row snaps closed from either direction. */
   onClose: () => void;
   onSharePress: () => void;
   onMovePress: () => void;
   onDeletePress: () => void;
+  onPinPress: () => void;
   children: React.ReactNode;
 }
 
 /**
  * A swipe-to-reveal row built with the modern Gesture API + Reanimated.
  *
- * Swiping left reveals three actions (Share, Move, Delete) anchored to the
- * right edge. The row's horizontal offset is clamped to
- * `[-ACTIONS_WIDTH, 0]`. The open/closed state is owned by the parent so it
- * can guarantee only a single row is open at any time — when `isOpen` flips
- * to false the row springs shut.
+ * • Swipe LEFT  → reveals Share / Move / Delete pills (right side).
+ * • Swipe RIGHT → reveals Pin pill (left side).
+ * • Both sides share rubber-band resistance past the reveal point, pill
+ *   growth up to ROW_H, and label-fade on over-drag.
+ * • Left side additionally staggers the three buttons as they appear/disappear.
+ * • All visibility is gesture-driven via derived openProgress / pinProgress.
  */
 export function SwipeableListRow({
-  isOpen,
-  onOpen,
+  openSide,
+  onOpenLeft,
+  onOpenRight,
   onClose,
   onSharePress,
   onMovePress,
   onDeletePress,
+  onPinPress,
   children,
 }: SwipeableListRowProps): React.JSX.Element {
   const translateX = useSharedValue(0);
-  const startX = useSharedValue(0);
+  const startX     = useSharedValue(0);
+  /**
+   * Set to 1 once the haptic fires during a right over-drag.
+   * Reset to 0 when the user pulls back into the normal range or a new gesture begins.
+   */
+  const hapticFired = useSharedValue(0);
 
-  // When the parent closes this row (e.g. another row opened), spring shut.
+  // ---- Derived progress values ---------------------------------------------
+
+  /** 0 = closed, 1 = fully open-left. */
+  const openProgress = useDerivedValue(() =>
+    interpolate(translateX.value, [0, -REVEAL_LEFT], [0, 1], Extrapolation.CLAMP),
+  );
+
+  /** 0 = closed, 1 = fully open-right (pin revealed). */
+  const pinProgress = useDerivedValue(() =>
+    interpolate(translateX.value, [0, REVEAL_RIGHT], [0, 1], Extrapolation.CLAMP),
+  );
+
+  /** Actual (dampened) px dragged past −REVEAL_LEFT (left over-drag). */
+  const overDrag = useDerivedValue(() =>
+    Math.max(0, -(translateX.value + REVEAL_LEFT)),
+  );
+
+  /** Actual (dampened) px dragged past +REVEAL_RIGHT (right elongation). */
+  const rightOverDrag = useDerivedValue(() =>
+    Math.max(0, translateX.value - REVEAL_RIGHT),
+  );
+
+  // Left-side growth
+  const growProgress = useDerivedValue(() =>
+    interpolate(overDrag.value, [0, GROW_THRESHOLD], [0, 1], Extrapolation.CLAMP),
+  );
+  const separateProgress = useDerivedValue(() =>
+    interpolate(
+      overDrag.value,
+      [GROW_THRESHOLD, GROW_THRESHOLD + SEPARATE_EXTRA],
+      [0, 1],
+      Extrapolation.CLAMP,
+    ),
+  );
+
+  // Right-side (pin) height growth is no longer needed — width-only elongation.
+  // rightGrowProgress is unused; kept derived value removed.
+
+  // ---- External open-state control -----------------------------------------
+
   useEffect(() => {
-    if (!isOpen) {
+    if (openSide === 'left') {
+      translateX.value = withSpring(-REVEAL_LEFT, SPRING);
+    } else if (openSide === 'right') {
+      translateX.value = withSpring(REVEAL_RIGHT, SPRING);
+    } else {
       translateX.value = withSpring(0, SPRING);
     }
-  }, [isOpen, translateX]);
+  }, [openSide, translateX]);
+
+  // ---- Gesture -------------------------------------------------------------
+
+  /** Called on the JS thread to fire a light-impact haptic (subtle, like a long-press tick). */
+  const triggerHaptic = (): void => {
+    try {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {
+      // silently ignore if haptics not available on this device/build
+    }
+  };
 
   const pan = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-12, 12])
     .onBegin(() => {
       startX.value = translateX.value;
+      hapticFired.value = 0;
     })
     .onUpdate((e) => {
-      const next = startX.value + e.translationX;
-      translateX.value = Math.min(0, Math.max(-ACTIONS_WIDTH, next));
+      const raw = startX.value + e.translationX;
+      if (raw <= 0) {
+        // Left drag — rubber-band past REVEAL_LEFT.
+        translateX.value = raw >= -REVEAL_LEFT
+          ? raw
+          : -REVEAL_LEFT + (raw + REVEAL_LEFT) * RUBBER_BAND;
+      } else if (raw <= REVEAL_RIGHT) {
+        // Normal right drag — no resistance.
+        translateX.value = raw;
+        hapticFired.value = 0; // reset if user pulls back into normal range
+      } else {
+        // Right over-drag — elongation zone with two-phase resistance.
+        const rawOver = raw - REVEAL_RIGHT;
+        // Fire haptic exactly once when crossing the trigger threshold.
+        if (hapticFired.value === 0 && rawOver >= ELONGATE_RAW_TRIGGER) {
+          hapticFired.value = 1;
+          runOnJS(triggerHaptic)();
+        }
+        // Phase 1: normal RUBBER_BAND resistance.
+        // Phase 2: much heavier RUBBER_BAND_ELONGATE resistance past the trigger.
+        translateX.value = rawOver <= ELONGATE_RAW_TRIGGER
+          ? REVEAL_RIGHT + rawOver * RUBBER_BAND
+          : REVEAL_RIGHT
+              + ELONGATE_RAW_TRIGGER * RUBBER_BAND
+              + (rawOver - ELONGATE_RAW_TRIGGER) * RUBBER_BAND_ELONGATE;
+      }
     })
     .onEnd((e) => {
-      const shouldOpen =
-        translateX.value < -ACTIONS_WIDTH / 2 || e.velocityX < -600;
-      if (shouldOpen) {
-        translateX.value = withSpring(-ACTIONS_WIDTH, SPRING);
-        runOnJS(onOpen)();
+      const x = translateX.value;
+      if (hapticFired.value === 1) {
+        // User dragged far enough → auto-pin and snap back to closed.
+        hapticFired.value = 0;
+        translateX.value = withSpring(0, SPRING);
+        runOnJS(onClose)();
+        runOnJS(onPinPress)();
+      } else if (x <= -REVEAL_LEFT / 2 || e.velocityX < -600) {
+        translateX.value = withSpring(-REVEAL_LEFT, SPRING);
+        runOnJS(onOpenLeft)();
+      } else if (x >= REVEAL_RIGHT / 2 || e.velocityX > 600) {
+        translateX.value = withSpring(REVEAL_RIGHT, SPRING);
+        runOnJS(onOpenRight)();
       } else {
         translateX.value = withSpring(0, SPRING);
         runOnJS(onClose)();
       }
     });
 
-  const rowStyle = useAnimatedStyle(() => ({
+  const contentStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }));
 
-  /** Closes the row before running an action so the row resets afterwards. */
+  // ---- Left-side pill styles (growth + label fade) -------------------------
+
+  const pillGrowStyle = useAnimatedStyle(() => {
+    const h = interpolate(growProgress.value, [0, 1], [PILL_H, PILL_H_MAX]);
+    return { height: h, borderRadius: h / 2 };
+  });
+  const iconGrowStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(growProgress.value, [0, 1], [1, ICON_SCALE_MAX]) }],
+  }));
+  const labelGrowStyle = useAnimatedStyle(() => ({
+    opacity: 1 - growProgress.value * 0.9,
+    transform: [{ scale: interpolate(growProgress.value, [0, 1], [1, 1.25]) }],
+  }));
+
+  // ---- Right-side (pin) pill styles ----------------------------------------
+
+  /**
+   * Width is derived directly from translateX so the pill always fills exactly
+   * the space between PIN_LEFT and the content's left edge (minus THUMB_GAP).
+   * This prevents both clipping and overflow at any swipe distance.
+   */
+  const pinPillStyle = useAnimatedStyle(() => {
+    // Available space = how far the content has shifted right, minus margins.
+    const available = translateX.value - PIN_LEFT - THUMB_GAP;
+    const w = Math.max(PILL_W, Math.min(available, PIN_W_MAX));
+    return { width: w };
+  });
+
+  // ---- Left-side stagger (per-pill visibility + separation) ----------------
+  //   Delete: 0→0.5   (first in / last out)
+  //   Move:   0.25→0.75
+  //   Share:  0.5→1.0 (last in / first out)
+
+  const deleteCellStyle = useAnimatedStyle(() => {
+    const vis = interpolate(openProgress.value, [0, 0.5], [0, 1], Extrapolation.CLAMP);
+    return { right: DELETE_RIGHT, opacity: vis, transform: [{ scale: vis }] };
+  });
+  const moveCellStyle = useAnimatedStyle(() => {
+    const vis = interpolate(openProgress.value, [0.25, 0.75], [0, 1], Extrapolation.CLAMP);
+    const sep = separateProgress.value * SEPARATE_SPREAD;
+    return { right: MOVE_RIGHT + sep, opacity: vis, transform: [{ scale: vis }] };
+  });
+  const shareCellStyle = useAnimatedStyle(() => {
+    const vis = interpolate(openProgress.value, [0.5, 1], [0, 1], Extrapolation.CLAMP);
+    const sep = separateProgress.value * SEPARATE_SPREAD;
+    return { right: SHARE_RIGHT + sep * 2, opacity: vis, transform: [{ scale: vis }] };
+  });
+
+  // ---- Right-side (pin) cell style -----------------------------------------
+  // Opacity-only visibility — no scale transform, so the pill never shifts left
+  // from its anchor at PIN_LEFT, preventing clipping on the left edge.
+
+  const pinCellStyle = useAnimatedStyle(() => {
+    const vis = interpolate(pinProgress.value, [0, 0.6], [0, 1], Extrapolation.CLAMP);
+    return { opacity: vis };
+  });
+
+  /** Closes the row then fires an action. */
   const runAction = (action: () => void): void => {
     onClose();
     action();
@@ -103,93 +387,156 @@ export function SwipeableListRow({
 
   return (
     <View style={styles.container}>
+      {/* Pin container — left side, revealed by swiping right. */}
       <View
-        style={styles.actions}
-        pointerEvents={isOpen ? 'auto' : 'none'}
+        style={styles.pinContainer}
+        pointerEvents={openSide === 'right' ? 'box-none' : 'none'}
       >
-        <ActionButton
-          color={SHARE_COLOR}
-          icon="share-outline"
-          label="Share"
-          onPress={() => runAction(onSharePress)}
-        />
-        <ActionButton
-          color={MOVE_COLOR}
-          icon="folder-outline"
-          label="Move"
-          onPress={() => runAction(onMovePress)}
-        />
-        <ActionButton
-          color={DELETE_COLOR}
-          icon="trash-outline"
-          label="Delete"
-          onPress={() => runAction(onDeletePress)}
-        />
+        <Animated.View style={[styles.pinCell, pinCellStyle]}>
+          <Pressable
+            onPress={() => runAction(onPinPress)}
+            style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Pin"
+          >
+            <Animated.View style={[styles.pinPill, pinPillStyle]}>
+              <PinIcon />
+            </Animated.View>
+            <Text style={styles.pillLabel}>Pin</Text>
+          </Pressable>
+        </Animated.View>
       </View>
 
+      {/* Swipeable content — shifts left or right to reveal pills. */}
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.row, rowStyle]}>{children}</Animated.View>
+        <Animated.View style={[styles.content, contentStyle]}>
+          {children}
+        </Animated.View>
       </GestureDetector>
+
+      {/* Actions container — right side, revealed by swiping left. */}
+      <View
+        style={styles.actionsContainer}
+        pointerEvents={openSide === 'left' ? 'box-none' : 'none'}
+      >
+        {/* Share (Upload) — leftmost, appears last when opening */}
+        <Animated.View style={[styles.actionCell, shareCellStyle]}>
+          <Pressable
+            onPress={() => runAction(onSharePress)}
+            style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Share"
+          >
+            <Animated.View style={[styles.pill, { backgroundColor: SHARE_COLOR }, pillGrowStyle]}>
+              <Animated.View style={iconGrowStyle}><UploadIcon /></Animated.View>
+            </Animated.View>
+            <Animated.Text style={[styles.pillLabel, labelGrowStyle]}>Share</Animated.Text>
+          </Pressable>
+        </Animated.View>
+
+        {/* Move (Folder) — middle */}
+        <Animated.View style={[styles.actionCell, moveCellStyle]}>
+          <Pressable
+            onPress={() => runAction(onMovePress)}
+            style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Move"
+          >
+            <Animated.View style={[styles.pill, { backgroundColor: MOVE_COLOR }, pillGrowStyle]}>
+              <Animated.View style={iconGrowStyle}><FolderIcon /></Animated.View>
+            </Animated.View>
+            <Animated.Text style={[styles.pillLabel, labelGrowStyle]}>Move</Animated.Text>
+          </Pressable>
+        </Animated.View>
+
+        {/* Delete (Trash) — rightmost, appears first when opening */}
+        <Animated.View style={[styles.actionCell, deleteCellStyle]}>
+          <Pressable
+            onPress={() => runAction(onDeletePress)}
+            style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Delete"
+          >
+            <Animated.View style={[styles.pill, { backgroundColor: DELETE_COLOR }, pillGrowStyle]}>
+              <Animated.View style={iconGrowStyle}><TrashIcon /></Animated.View>
+            </Animated.View>
+            <Animated.Text style={[styles.pillLabel, labelGrowStyle]}>Delete</Animated.Text>
+          </Pressable>
+        </Animated.View>
+      </View>
     </View>
   );
 }
 
-interface ActionButtonProps {
-  color: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}
-
-function ActionButton({
-  color,
-  icon,
-  label,
-  onPress,
-}: ActionButtonProps): React.JSX.Element {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        { backgroundColor: color },
-        pressed && styles.actionPressed,
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <Ionicons name={icon} size={18} color={Colors.white} />
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
-  );
-}
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
     overflow: 'hidden',
   },
-  actions: {
-    ...StyleSheet.absoluteFillObject,
-    left: undefined,
-    width: ACTIONS_WIDTH,
-    flexDirection: 'row',
-    alignSelf: 'flex-end',
+  content: {
+    backgroundColor: Colors.background,
   },
-  actionButton: {
-    width: ACTION_WIDTH,
+  /** Absolute overlay for the Pin pill — left side. */
+  pinContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  /** Absolute overlay for Share/Move/Delete pills — right side. */
+  actionsContainer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  /** Cell for each right-side action pill. left/right position driven by animated style. */
+  actionCell: {
+    position: 'absolute',
+    top: 0,
+    width: PILL_W,
+    height: ROW_H,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  /**
+   * Pin cell — left-anchored at PIN_LEFT, wide enough for the fully elongated pill.
+   * Uses opacity-only animation so the pill's left edge never moves.
+   */
+  pinCell: {
+    position: 'absolute',
+    left: PIN_LEFT,
+    top: 0,
+    width: PIN_W_MAX,
+    height: ROW_H,
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+  },
+  pillTouchable: {
+    alignItems: 'center',
+  },
+  pillPressed: {
+    opacity: 0.75,
+  },
+  /** Static pill base — height and borderRadius animated via pillGrowStyle on left side. */
+  pill: {
+    width: PILL_W,
+    height: PILL_H,
+    borderRadius: PILL_H / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
   },
-  actionPressed: {
-    opacity: 0.8,
+  /** Pin pill — fixed height/radius; only width is animated via pinPillStyle. */
+  pinPill: {
+    width: PILL_W,
+    height: PILL_H,
+    borderRadius: PILL_H / 2,
+    backgroundColor: PIN_COLOR,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionLabel: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 10,
+  pillLabel: {
+    marginTop: LABEL_MARGIN_TOP,
+    fontFamily: FontFamily.light,
+    fontSize: 9,
     color: Colors.white,
-  },
-  row: {
-    backgroundColor: Colors.background,
+    textAlign: 'center',
   },
 });

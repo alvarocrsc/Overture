@@ -16,6 +16,8 @@ import {
   getFolderContents,
   getFolderTree,
   createFolder,
+  pinList,
+  unpinList,
 } from '../controllers/lists.controller';
 import { verifyAccessToken } from '../middleware/auth';
 import { upload } from '../middleware/upload';
@@ -41,6 +43,8 @@ router.post('/:id/save', verifyAccessToken, saveList);
 router.delete('/:id/save', verifyAccessToken, unsaveList);
 router.post('/:id/like', verifyAccessToken, likeList);
 router.delete('/:id/like', verifyAccessToken, unlikeList);
+router.post('/:id/pin', verifyAccessToken, pinList);
+router.delete('/:id/pin', verifyAccessToken, unpinList);
 router.post('/:id/icon', verifyAccessToken, upload.single('icon'), uploadListIcon);
 
 export default router;

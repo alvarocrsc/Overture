@@ -231,6 +231,16 @@ export async function moveListToFolder(
  * Deletes a list owned by the authenticated user.
  * @param listId - Internal list ID.
  */
+/** Pins a list inside its current folder. */
+export async function pinList(listId: number): Promise<void> {
+  await api.post(`/lists/${listId}/pin`);
+}
+
+/** Removes the pin from a list. */
+export async function unpinList(listId: number): Promise<void> {
+  await api.delete(`/lists/${listId}/pin`);
+}
+
 export async function deleteList(listId: number): Promise<void> {
   await api.delete(`/lists/${listId}`);
 }

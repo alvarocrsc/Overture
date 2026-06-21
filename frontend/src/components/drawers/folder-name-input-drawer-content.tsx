@@ -7,8 +7,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 import { useCreateFolder } from '@/src/hooks/use-lists';
@@ -30,8 +31,11 @@ interface FolderNameInputDrawerContentProps {
  * Body of the "New Folder" step rendered inside `BottomDrawer`.
  *
  * Collects a folder name and creates the folder under `parentFolderId`.
- * Uses keyboard-controller's `KeyboardAvoidingView` so the input lifts
- * above the keyboard within the bottom sheet.
+ *
+ * Keyboard handling: `useKeyboardAnimation` adds animated `paddingBottom`
+ * equal to the keyboard height. Because BottomDrawer measures its children
+ * via `onLayout`, the sheet automatically grows and slides above the keyboard
+ * as the user types.
  */
 export default function FolderNameInputDrawerContent({
   parentFolderId,
@@ -41,6 +45,26 @@ export default function FolderNameInputDrawerContent({
   const [name, setName] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { create, isPending } = useCreateFolder();
+
+  // Track keyboard height in a Reanimated SharedValue so BottomDrawer's
+  // onLayout callback sees the increased height and slides the sheet up.
+  const kbHeight = useSharedValue(0);
+  useKeyboardHandler(
+    {
+      onMove: (e) => {
+        'worklet';
+        kbHeight.value = e.height;
+      },
+      onEnd: (e) => {
+        'worklet';
+        kbHeight.value = e.height;
+      },
+    },
+    [],
+  );
+  const paddingStyle = useAnimatedStyle(() => ({
+    paddingBottom: kbHeight.value,
+  }));
 
   const canConfirm = name.trim().length > 0 && !isPending;
 
@@ -60,72 +84,70 @@ export default function FolderNameInputDrawerContent({
   };
 
   return (
-    <KeyboardAvoidingView behavior="padding">
-      <View>
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable
-            onPress={onCancel}
-            disabled={isPending}
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.backButton,
-              pressed && styles.pressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-          >
-            <Ionicons name="chevron-back" size={22} color={Colors.white} />
-          </Pressable>
-          <Text style={styles.headerTitle}>New Folder</Text>
-          <View style={styles.backButton} />
-        </View>
-
-        {/* Name */}
-        <Text style={styles.fieldLabel}>NAME</Text>
-        <View style={styles.fieldBox}>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            editable={!isPending}
-            placeholder="Folder name"
-            placeholderTextColor={Colors.textMuted}
-            style={styles.nameInput}
-            maxLength={100}
-            autoCapitalize="sentences"
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              void handleConfirm();
-            }}
-          />
-        </View>
-
-        {/* Confirm */}
+    <Animated.View style={paddingStyle}>
+      {/* Header */}
+      <View style={styles.header}>
         <Pressable
-          onPress={() => {
-            void handleConfirm();
-          }}
-          disabled={!canConfirm}
-          style={[
-            styles.confirmButton,
-            !canConfirm && styles.confirmButtonDisabled,
+          onPress={onCancel}
+          disabled={isPending}
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.pressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Create folder"
+          accessibilityLabel="Back"
         >
-          {isPending ? (
-            <ActivityIndicator color={Colors.buttonText} />
-          ) : (
-            <Text style={styles.confirmText}>Create</Text>
-          )}
+          <Ionicons name="chevron-back" size={22} color={Colors.white} />
         </Pressable>
-
-        {errorMessage ? (
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        ) : null}
+        <Text style={styles.headerTitle}>New Folder</Text>
+        <View style={styles.backButton} />
       </View>
-    </KeyboardAvoidingView>
+
+      {/* Name */}
+      <Text style={styles.fieldLabel}>NAME</Text>
+      <View style={styles.fieldBox}>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          editable={!isPending}
+          placeholder="Folder name"
+          placeholderTextColor={Colors.textMuted}
+          style={styles.nameInput}
+          maxLength={100}
+          autoCapitalize="sentences"
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={() => {
+            void handleConfirm();
+          }}
+        />
+      </View>
+
+      {/* Confirm */}
+      <Pressable
+        onPress={() => {
+          void handleConfirm();
+        }}
+        disabled={!canConfirm}
+        style={[
+          styles.confirmButton,
+          !canConfirm && styles.confirmButtonDisabled,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Create folder"
+      >
+        {isPending ? (
+          <ActivityIndicator color={Colors.buttonText} />
+        ) : (
+          <Text style={styles.confirmText}>Create</Text>
+        )}
+      </Pressable>
+
+      {errorMessage ? (
+        <Text style={styles.errorText}>{errorMessage}</Text>
+      ) : null}
+    </Animated.View>
   );
 }
 

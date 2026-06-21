@@ -2,6 +2,7 @@ export interface List {
   id: number;
   user_id: number;
   folder_id: number | null;
+  pin_order: number | null;
   title: string;
   description: string | null;
   icon_url: string | null;
@@ -22,6 +23,7 @@ export interface ListFolder {
   name: string;
   parent_folder_id: number | null;
   depth: number;
+  pin_order: number | null;
   lists_count: number;
   subfolders_count: number;
   created_at: string;
