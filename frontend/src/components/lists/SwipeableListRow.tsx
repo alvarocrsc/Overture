@@ -135,15 +135,31 @@ function TrashIcon(): React.JSX.Element {
   );
 }
 
-/** Location-pin icon (used for the Pin action). */
-function PinIcon(): React.JSX.Element {
+/** Pin icon — solid push-pin (used when the list is NOT yet pinned). */
+function PinSolidIcon({ color = 'white' }: { color?: string }): React.JSX.Element {
   return (
-    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
+    <Svg width={15} height={15} viewBox="0 0 15 15" fill="none">
       <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M9 1.5C6.515 1.5 4.5 3.515 4.5 6C4.5 9.75 9 16.5 9 16.5C9 16.5 13.5 9.75 13.5 6C13.5 3.515 11.485 1.5 9 1.5ZM9 7.875C7.964 7.875 7.125 7.036 7.125 6C7.125 4.964 7.964 4.125 9 4.125C10.036 4.125 10.875 4.964 10.875 6C10.875 7.036 10.036 7.875 9 7.875Z"
+        d="M12.8875 4.35386L10.664 2.12816C9.14398 0.606676 8.38402 -0.15407 7.56772 0.0260119C6.75151 0.206101 6.38139 1.21616 5.64122 3.23629L5.14025 4.60357C4.94292 5.14212 4.84426 5.41139 4.66674 5.61968C4.5871 5.71314 4.49647 5.79664 4.39684 5.86837C4.17479 6.02826 3.89854 6.10439 3.34605 6.25671C2.10078 6.59999 1.47814 6.77166 1.24352 7.17906C1.14209 7.35516 1.0893 7.55511 1.09058 7.75843C1.09355 8.22861 1.55022 8.68573 2.46354 9.59998L3.52448 10.6622L0.167584 14.0223C-0.0558613 14.2459 -0.0558613 14.6086 0.167584 14.8323C0.391029 15.0559 0.753313 15.0559 0.976759 14.8323L4.33376 11.472L5.43325 12.5726C6.35236 13.4926 6.81196 13.9527 7.28498 13.9533C7.48432 13.9536 7.68022 13.9018 7.8534 13.803C8.26432 13.5685 8.43689 12.9413 8.78204 11.6868C8.93384 11.1354 9.00966 10.8596 9.16896 10.6376C9.23871 10.5405 9.31956 10.4518 9.41 10.3735C9.61648 10.1947 9.884 10.0942 10.419 9.89323L11.802 9.37355C13.7999 8.62296 14.7988 8.24766 14.9749 7.43361C15.1509 6.61949 14.3964 5.86427 12.8875 4.35386Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+/** Unpin icon — push-pin with a line through it (used when the list IS pinned). */
+function UnpinIcon(): React.JSX.Element {
+  return (
+    <Svg width={15} height={15} viewBox="0 0 15 15" fill="none">
+      <Path
+        d="M10.0387 10.0377C9.7432 10.1542 9.56031 10.2433 9.40977 10.3737C9.31939 10.4519 9.23827 10.5403 9.16856 10.6374C9.00933 10.8593 8.93356 11.135 8.78184 11.6862C8.43676 12.9404 8.26389 13.5678 7.85313 13.8024C7.68001 13.9011 7.48406 13.9531 7.28477 13.9528C6.81175 13.9521 6.35232 13.4919 5.43321 12.5719L4.3336 11.4713L0.976178 14.8317C0.752752 15.0553 0.391034 15.0553 0.167584 14.8317C-0.0558613 14.608 -0.0558613 14.2458 0.167584 14.0221L3.52403 10.6618L2.46348 9.59927C1.5504 8.68526 1.09362 8.22849 1.09044 7.75845C1.08915 7.55512 1.14135 7.35447 1.24278 7.17837C1.47744 6.77109 2.10041 6.59967 3.34532 6.25649C3.8977 6.1042 4.17407 6.02765 4.3961 5.86782C4.49569 5.79612 4.58698 5.71319 4.66661 5.61977C4.7949 5.46924 4.87985 5.28569 4.99278 4.99282L10.0387 10.0377ZM7.567 0.0260247C8.38327 -0.154053 9.14373 0.606168 10.6637 2.12759L12.8873 4.35317C14.3962 5.86359 15.1502 6.61913 14.9742 7.43325C14.8201 8.14566 14.0361 8.52207 12.5035 9.10806L5.90684 2.51235C6.48186 0.97198 6.85505 0.183378 7.567 0.0260247Z"
         fill="white"
+      />
+      <Path
+        d="M3.76588 1.99969L13.0997 11.3335"
+        stroke="white"
+        strokeWidth={0.8}
+        strokeLinecap="round"
       />
     </Svg>
   );
@@ -170,6 +186,8 @@ interface SwipeableListRowProps {
   onMovePress: () => void;
   onDeletePress: () => void;
   onPinPress: () => void;
+  /** Whether the list is currently pinned — controls the pill icon and label. */
+  isPinned: boolean;
   children: React.ReactNode;
 }
 
@@ -192,6 +210,7 @@ export function SwipeableListRow({
   onMovePress,
   onDeletePress,
   onPinPress,
+  isPinned,
   children,
 }: SwipeableListRowProps): React.JSX.Element {
   const translateX = useSharedValue(0);
@@ -204,9 +223,10 @@ export function SwipeableListRow({
 
   // ---- Derived progress values ---------------------------------------------
 
-  /** 0 = closed, 1 = fully open-left. */
+  /** 0 = closed, 1 = fully open-left. Dead zone of -5px prevents the
+   * delete pill from flashing during the spring recoil after a right swipe. */
   const openProgress = useDerivedValue(() =>
-    interpolate(translateX.value, [0, -REVEAL_LEFT], [0, 1], Extrapolation.CLAMP),
+    interpolate(translateX.value, [-20, -REVEAL_LEFT], [0, 1], Extrapolation.CLAMP),
   );
 
   /** 0 = closed, 1 = fully open-right (pin revealed). */
@@ -379,6 +399,15 @@ export function SwipeableListRow({
     return { opacity: vis };
   });
 
+  // ---- Pin indicator badge (shown on the row when pinned, fades on any swipe) ----
+
+  const pinIndicatorBadgeStyle = useAnimatedStyle(() => {
+    // Fade out quickly as soon as the user starts swiping in either direction.
+    const leftFade  = interpolate(openProgress.value, [0, 0.2], [1, 0], Extrapolation.CLAMP);
+    const rightFade = interpolate(pinProgress.value,  [0, 0.2], [1, 0], Extrapolation.CLAMP);
+    return { opacity: Math.min(leftFade, rightFade) };
+  });
+
   /** Closes the row then fires an action. */
   const runAction = (action: () => void): void => {
     onClose();
@@ -397,12 +426,12 @@ export function SwipeableListRow({
             onPress={() => runAction(onPinPress)}
             style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
             accessibilityRole="button"
-            accessibilityLabel="Pin"
+            accessibilityLabel={isPinned ? 'Unpin' : 'Pin'}
           >
             <Animated.View style={[styles.pinPill, pinPillStyle]}>
-              <PinIcon />
+              {isPinned ? <UnpinIcon /> : <PinSolidIcon />}
             </Animated.View>
-            <Text style={styles.pillLabel}>Pin</Text>
+            <Text style={styles.pillLabel}>{isPinned ? 'Unpin' : 'Pin'}</Text>
           </Pressable>
         </Animated.View>
       </View>
@@ -413,6 +442,17 @@ export function SwipeableListRow({
           {children}
         </Animated.View>
       </GestureDetector>
+
+      {/* Pin indicator badge — absolutely positioned at the row's trailing edge.
+          Lives outside the sliding content so it stays fixed while fading out. */}
+      {isPinned && (
+        <Animated.View
+          style={[styles.pinIndicatorBadge, pinIndicatorBadgeStyle]}
+          pointerEvents="none"
+        >
+          <PinSolidIcon color={Colors.accentBlue} />
+        </Animated.View>
+      )}
 
       {/* Actions container — right side, revealed by swiping left. */}
       <View
@@ -508,6 +548,15 @@ const styles = StyleSheet.create({
     height: ROW_H,
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
+  },
+  /** Pin indicator badge — fixed at the trailing edge of the row, fades on swipe. */
+  pinIndicatorBadge: {
+    position: 'absolute',
+    right: 4,
+    top: 0,
+    height: ROW_H,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pillTouchable: {
     alignItems: 'center',

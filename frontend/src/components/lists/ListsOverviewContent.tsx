@@ -149,6 +149,7 @@ export default function ListsOverviewContent({
         onMovePress={() => handleMove(list)}
         onDeletePress={() => handleDelete(list)}
         onPinPress={() => handlePin(list)}
+        isPinned={list.pin_order !== null}
       >
         <ListRowItem
           list={list}

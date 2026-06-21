@@ -345,7 +345,7 @@ export async function getFolderContentsService(
   const folders = await query<ListFolder>(
     `${FOLDER_SELECT}
      WHERE f.user_id = ? AND f.parent_folder_id <=> ?
-     ORDER BY f.pin_order ASC, f.created_at ASC`,
+     ORDER BY (f.pin_order IS NULL) ASC, f.pin_order ASC, f.created_at ASC`,
     [userId, folderId],
   );
 
@@ -375,7 +375,7 @@ export async function getFolderContentsService(
      FROM lists l
      JOIN users u ON l.user_id = u.id
      WHERE l.user_id = ? AND l.folder_id <=> ?
-     ORDER BY l.pin_order ASC, l.created_at ASC`,
+     ORDER BY (l.pin_order IS NULL) ASC, l.pin_order ASC, l.created_at ASC`,
     [userId, folderId],
   );
 
