@@ -383,6 +383,37 @@ export async function getFolderContentsService(
 }
 
 /**
+ * Pins a folder inside its parent (or root) for the given user.
+ * @param userId - The authenticated user's ID.
+ * @param folderId - The folder to pin.
+ */
+export async function pinFolderService(
+  userId: number,
+  folderId: number,
+): Promise<void> {
+  await fetchFolderForUser(folderId, userId); // throws 404/403 if not owned
+  await execute(
+    `UPDATE list_folders SET pin_order = UNIX_TIMESTAMP() WHERE id = ?`,
+    [folderId],
+  );
+}
+
+/**
+ * Removes the pin from a folder.
+ * @param userId - The authenticated user's ID.
+ * @param folderId - The folder to unpin.
+ */
+export async function unpinFolderService(
+  userId: number,
+  folderId: number,
+): Promise<void> {
+  await fetchFolderForUser(folderId, userId);
+  await execute(
+    `UPDATE list_folders SET pin_order = NULL WHERE id = ?`,
+    [folderId],
+  );
+}
+/**
  * Pins a list inside its current folder (or root) for the given user.
  * Sets `pin_order = UNIX_TIMESTAMP()` on the target list so newly-pinned
  * items sort above older pins (ascending order means lower = higher up,

@@ -241,6 +241,16 @@ export async function unpinList(listId: number): Promise<void> {
   await api.delete(`/lists/${listId}/pin`);
 }
 
+/** Pins a folder inside its parent (or root). */
+export async function pinFolder(folderId: number): Promise<void> {
+  await api.post(`/lists/folders/${folderId}/pin`);
+}
+
+/** Removes the pin from a folder. */
+export async function unpinFolder(folderId: number): Promise<void> {
+  await api.delete(`/lists/folders/${folderId}/pin`);
+}
+
 export async function deleteList(listId: number): Promise<void> {
   await api.delete(`/lists/${listId}`);
 }

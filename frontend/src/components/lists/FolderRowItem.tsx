@@ -47,8 +47,6 @@ export function FolderRowItem({
           {listsLabel}
         </Text>
       </View>
-
-      <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
     </Pressable>
   );
 }

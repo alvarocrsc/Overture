@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -183,11 +184,23 @@ interface SwipeableListRowProps {
   /** Called when the row snaps closed from either direction. */
   onClose: () => void;
   onSharePress: () => void;
+  /** Optional — pass a no-op when showMove is false. */
   onMovePress: () => void;
   onDeletePress: () => void;
   onPinPress: () => void;
   /** Whether the list is currently pinned — controls the pill icon and label. */
   isPinned: boolean;
+  /**
+   * When false, the Move pill is hidden and Share sits directly beside Delete.
+   * @default true
+   */
+  showMove?: boolean;
+  /**
+   * When true, a chevron-forward overlay is rendered at the trailing edge and
+   * fades out on any swipe (left or right). Use for folder rows.
+   * @default false
+   */
+  trailingChevron?: boolean;
   children: React.ReactNode;
 }
 
@@ -211,6 +224,8 @@ export function SwipeableListRow({
   onDeletePress,
   onPinPress,
   isPinned,
+  showMove = true,
+  trailingChevron = false,
   children,
 }: SwipeableListRowProps): React.JSX.Element {
   const translateX = useSharedValue(0);
@@ -292,18 +307,36 @@ export function SwipeableListRow({
     })
     .onUpdate((e) => {
       const raw = startX.value + e.translationX;
-      if (raw <= 0) {
-        // Left drag — rubber-band past REVEAL_LEFT.
-        translateX.value = raw >= -REVEAL_LEFT
-          ? raw
-          : -REVEAL_LEFT + (raw + REVEAL_LEFT) * RUBBER_BAND;
-      } else if (raw <= REVEAL_RIGHT) {
+
+      // Three-position model: closed (0), open-right (+REVEAL_RIGHT), open-left (-REVEAL_LEFT).
+      // Each gesture can only move one step from where it started.
+      // — Starting at open-right: can only swipe back toward 0 (clamp raw ≥ 0).
+      // — Starting at open-left:  can only swipe back toward 0 (clamp raw ≤ 0).
+      // — Starting at closed:     can swipe to either side freely.
+      const isStartRight = startX.value >= REVEAL_RIGHT / 2;
+      const isStartLeft  = startX.value <= -REVEAL_LEFT / 2;
+
+      let clamped = raw;
+      if (isStartRight) {
+        // Coming from pin-open: only allow swiping back to closed (≥ 0).
+        clamped = Math.max(0, raw);
+      } else if (isStartLeft) {
+        // Coming from actions-open: only allow swiping back to closed (≤ 0).
+        clamped = Math.min(0, raw);
+      }
+
+      if (clamped <= 0) {
+        // Left side — rubber-band past REVEAL_LEFT.
+        translateX.value = clamped >= -REVEAL_LEFT
+          ? clamped
+          : -REVEAL_LEFT + (clamped + REVEAL_LEFT) * RUBBER_BAND;
+      } else if (clamped <= REVEAL_RIGHT) {
         // Normal right drag — no resistance.
-        translateX.value = raw;
+        translateX.value = clamped;
         hapticFired.value = 0; // reset if user pulls back into normal range
       } else {
         // Right over-drag — elongation zone with two-phase resistance.
-        const rawOver = raw - REVEAL_RIGHT;
+        const rawOver = clamped - REVEAL_RIGHT;
         // Fire haptic exactly once when crossing the trigger threshold.
         if (hapticFired.value === 0 && rawOver >= ELONGATE_RAW_TRIGGER) {
           hapticFired.value = 1;
@@ -320,21 +353,42 @@ export function SwipeableListRow({
     })
     .onEnd((e) => {
       const x = translateX.value;
+      const isStartRight = startX.value >= REVEAL_RIGHT / 2;
+      const isStartLeft  = startX.value <= -REVEAL_LEFT / 2;
+
       if (hapticFired.value === 1) {
         // User dragged far enough → auto-pin and snap back to closed.
         hapticFired.value = 0;
         translateX.value = withSpring(0, SPRING);
         runOnJS(onClose)();
         runOnJS(onPinPress)();
-      } else if (x <= -REVEAL_LEFT / 2 || e.velocityX < -600) {
-        translateX.value = withSpring(-REVEAL_LEFT, SPRING);
-        runOnJS(onOpenLeft)();
-      } else if (x >= REVEAL_RIGHT / 2 || e.velocityX > 600) {
-        translateX.value = withSpring(REVEAL_RIGHT, SPRING);
-        runOnJS(onOpenRight)();
+      } else if (!isStartRight && !isStartLeft) {
+        // Starting from closed — snap to whichever side won.
+        if (x <= -REVEAL_LEFT / 2 || e.velocityX < -600) {
+          translateX.value = withSpring(-REVEAL_LEFT, SPRING);
+          runOnJS(onOpenLeft)();
+        } else if (x >= REVEAL_RIGHT / 2 || e.velocityX > 600) {
+          translateX.value = withSpring(REVEAL_RIGHT, SPRING);
+          runOnJS(onOpenRight)();
+        } else {
+          translateX.value = withSpring(0, SPRING);
+          runOnJS(onClose)();
+        }
       } else {
-        translateX.value = withSpring(0, SPRING);
-        runOnJS(onClose)();
+        // Starting from an open position — either close or stay open.
+        if (isStartRight && (x <= REVEAL_RIGHT / 2 || e.velocityX < -600)) {
+          translateX.value = withSpring(0, SPRING);
+          runOnJS(onClose)();
+        } else if (isStartLeft && (x >= -REVEAL_LEFT / 2 || e.velocityX > 600)) {
+          translateX.value = withSpring(0, SPRING);
+          runOnJS(onClose)();
+        } else if (isStartRight) {
+          translateX.value = withSpring(REVEAL_RIGHT, SPRING);
+          // already open-right, no callback needed
+        } else {
+          translateX.value = withSpring(-REVEAL_LEFT, SPRING);
+          // already open-left, no callback needed
+        }
       }
     });
 
@@ -371,9 +425,9 @@ export function SwipeableListRow({
   });
 
   // ---- Left-side stagger (per-pill visibility + separation) ----------------
-  //   Delete: 0→0.5   (first in / last out)
-  //   Move:   0.25→0.75
-  //   Share:  0.5→1.0 (last in / first out)
+  //   3-pill mode (showMove=true):  Delete 0→0.5, Move 0.25→0.75, Share 0.5→1.0
+  //   2-pill mode (showMove=false): Delete 0→0.5, Share 0.25→1.0
+  //   Separation animation only applies to 3-pill layout.
 
   const deleteCellStyle = useAnimatedStyle(() => {
     const vis = interpolate(openProgress.value, [0, 0.5], [0, 1], Extrapolation.CLAMP);
@@ -385,9 +439,14 @@ export function SwipeableListRow({
     return { right: MOVE_RIGHT + sep, opacity: vis, transform: [{ scale: vis }] };
   });
   const shareCellStyle = useAnimatedStyle(() => {
-    const vis = interpolate(openProgress.value, [0.5, 1], [0, 1], Extrapolation.CLAMP);
+    const vis = showMove
+      ? interpolate(openProgress.value, [0.5, 1], [0, 1], Extrapolation.CLAMP)
+      : interpolate(openProgress.value, [0.25, 1], [0, 1], Extrapolation.CLAMP);
     const sep = separateProgress.value * SEPARATE_SPREAD;
-    return { right: SHARE_RIGHT + sep * 2, opacity: vis, transform: [{ scale: vis }] };
+    // In 2-pill mode Share sits at MOVE_RIGHT (no separation multiplier).
+    const baseRight = showMove ? SHARE_RIGHT : MOVE_RIGHT;
+    const sepMultiplier = showMove ? 2 : 0;
+    return { right: baseRight + sep * sepMultiplier, opacity: vis, transform: [{ scale: vis }] };
   });
 
   // ---- Right-side (pin) cell style -----------------------------------------
@@ -444,13 +503,28 @@ export function SwipeableListRow({
       </GestureDetector>
 
       {/* Pin indicator badge — absolutely positioned at the row's trailing edge.
-          Lives outside the sliding content so it stays fixed while fading out. */}
+          Lives outside the sliding content so it stays fixed while fading out.
+          When a trailing chevron is also shown, offset leftward to avoid overlap. */}
       {isPinned && (
         <Animated.View
-          style={[styles.pinIndicatorBadge, pinIndicatorBadgeStyle]}
+          style={[
+            styles.pinIndicatorBadge,
+            trailingChevron && styles.pinIndicatorBadgeWithChevron,
+            pinIndicatorBadgeStyle,
+          ]}
           pointerEvents="none"
         >
           <PinSolidIcon color={Colors.accentBlue} />
+        </Animated.View>
+      )}
+
+      {/* Trailing chevron overlay — fixed at the row's right edge, fades on any swipe. */}
+      {trailingChevron && (
+        <Animated.View
+          style={[styles.trailingChevron, pinIndicatorBadgeStyle]}
+          pointerEvents="none"
+        >
+          <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
         </Animated.View>
       )}
 
@@ -474,20 +548,22 @@ export function SwipeableListRow({
           </Pressable>
         </Animated.View>
 
-        {/* Move (Folder) — middle */}
-        <Animated.View style={[styles.actionCell, moveCellStyle]}>
-          <Pressable
-            onPress={() => runAction(onMovePress)}
-            style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Move"
-          >
-            <Animated.View style={[styles.pill, { backgroundColor: MOVE_COLOR }, pillGrowStyle]}>
-              <Animated.View style={iconGrowStyle}><FolderIcon /></Animated.View>
-            </Animated.View>
-            <Animated.Text style={[styles.pillLabel, labelGrowStyle]}>Move</Animated.Text>
-          </Pressable>
-        </Animated.View>
+        {/* Move (Folder) — middle: only rendered in 3-pill mode */}
+        {showMove && (
+          <Animated.View style={[styles.actionCell, moveCellStyle]}>
+            <Pressable
+              onPress={() => runAction(onMovePress)}
+              style={({ pressed }) => [styles.pillTouchable, pressed && styles.pillPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Move"
+            >
+              <Animated.View style={[styles.pill, { backgroundColor: MOVE_COLOR }, pillGrowStyle]}>
+                <Animated.View style={iconGrowStyle}><FolderIcon /></Animated.View>
+              </Animated.View>
+              <Animated.Text style={[styles.pillLabel, labelGrowStyle]}>Move</Animated.Text>
+            </Pressable>
+          </Animated.View>
+        )}
 
         {/* Delete (Trash) — rightmost, appears first when opening */}
         <Animated.View style={[styles.actionCell, deleteCellStyle]}>
@@ -551,6 +627,19 @@ const styles = StyleSheet.create({
   },
   /** Pin indicator badge — fixed at the trailing edge of the row, fades on swipe. */
   pinIndicatorBadge: {
+    position: 'absolute',
+    right: 4,
+    top: 0,
+    height: ROW_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Shifted left when a trailing chevron is also displayed. */
+  pinIndicatorBadgeWithChevron: {
+    right: 28,
+  },
+  /** Chevron overlay for folder rows — same fade behaviour as the pin indicator badge. */
+  trailingChevron: {
     position: 'absolute',
     right: 4,
     top: 0,

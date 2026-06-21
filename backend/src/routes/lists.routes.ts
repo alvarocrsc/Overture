@@ -16,6 +16,8 @@ import {
   getFolderContents,
   getFolderTree,
   createFolder,
+  pinFolder,
+  unpinFolder,
   pinList,
   unpinList,
 } from '../controllers/lists.controller';
@@ -32,6 +34,8 @@ router.get('/user/:userId', getListsByUserId);
 router.get('/folder-contents', verifyAccessToken, getFolderContents);
 router.get('/folders/tree', verifyAccessToken, getFolderTree);
 router.post('/folders', verifyAccessToken, createFolder);
+router.post('/folders/:id/pin', verifyAccessToken, pinFolder);
+router.delete('/folders/:id/pin', verifyAccessToken, unpinFolder);
 
 router.post('/', verifyAccessToken, createList);
 router.get('/:id', getListById);

@@ -23,7 +23,9 @@ import {
 } from '@/src/lib/colors';
 import {
   useDeleteList,
+  usePinFolder,
   usePinList,
+  useUnpinFolder,
   useUnpinList,
   useFolderContents,
 } from '@/src/hooks/use-lists';
@@ -48,6 +50,10 @@ type OverviewRow =
   | { kind: 'list'; list: ListSummary }
   | { kind: 'folder'; folder: ListFolder };
 
+/** Identifies which row has a swipe panel open. Both lists and folders use
+ * numeric IDs; the kind field prevents collisions between them. */
+type OpenRow = { id: number; kind: 'list' | 'folder'; side: 'left' | 'right' } | null;
+
 interface ListsOverviewContentProps {
   /** The folder being viewed, or null for the root level. */
   folderId: number | null;
@@ -70,13 +76,15 @@ export default function ListsOverviewContent({
   const { remove } = useDeleteList();
   const { pin } = usePinList(folderId);
   const { unpin } = useUnpinList(folderId);
+  const { pin: pinFolderMut } = usePinFolder(folderId);
+  const { unpin: unpinFolderMut } = useUnpinFolder(folderId);
 
   const lists = data?.lists ?? [];
   const folders = data?.folders ?? [];
   const currentFolder = data?.currentFolder ?? null;
 
   // openRow tracks which row is open and which direction (left = actions, right = pin).
-  const [openRow, setOpenRow] = useState<{ id: number; side: 'left' | 'right' } | null>(null);
+  const [openRow, setOpenRow] = useState<OpenRow>(null);
   // Drawer visibility / targets.
   const [createListVisible, setCreateListVisible] = useState(false);
   const [folderInputVisible, setFolderInputVisible] = useState(false);
@@ -128,23 +136,65 @@ export default function ListsOverviewContent({
     }
   };
 
+  const handleFolderShare = (folder: ListFolder): void => {
+    setOpenRow(null);
+    void Share.share({ message: `Check out the "${folder.name}" folder on Overture` });
+  };
+
+  const handleFolderDelete = (folder: ListFolder): void => {
+    setOpenRow(null);
+    Alert.alert('Delete folder?', 'This cannot be undone. Lists inside will be moved to the root.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        // TODO: implement deleteFolder backend endpoint and hook.
+        onPress: () => { void folder; },
+      },
+    ]);
+  };
+
+  const handleFolderPin = (folder: ListFolder): void => {
+    setOpenRow(null);
+    if (folder.pin_order !== null) {
+      void unpinFolderMut(folder.id);
+    } else {
+      void pinFolderMut(folder.id);
+    }
+  };
+
   const renderRow = ({ item }: { item: OverviewRow }): React.JSX.Element => {
     if (item.kind === 'folder') {
+      const { folder } = item;
       return (
-        <FolderRowItem
-          folder={item.folder}
-          onPress={() => router.push(`/lists/folder/${item.folder.id}`)}
-        />
+        <SwipeableListRow
+          openSide={openRow?.id === folder.id && openRow.kind === 'folder' ? openRow.side : null}
+          onOpenLeft={() => setOpenRow({ id: folder.id, kind: 'folder', side: 'left' })}
+          onOpenRight={() => setOpenRow({ id: folder.id, kind: 'folder', side: 'right' })}
+          onClose={() => setOpenRow((prev) => (prev?.id === folder.id && prev.kind === 'folder' ? null : prev))}
+          onSharePress={() => handleFolderShare(folder)}
+          onMovePress={() => {}}
+          onDeletePress={() => handleFolderDelete(folder)}
+          onPinPress={() => handleFolderPin(folder)}
+          isPinned={folder.pin_order !== null}
+          showMove={false}
+          trailingChevron
+        >
+          <FolderRowItem
+            folder={folder}
+            onPress={() => router.push(`/lists/folder/${folder.id}`)}
+          />
+        </SwipeableListRow>
       );
     }
 
     const { list } = item;
     return (
       <SwipeableListRow
-        openSide={openRow?.id === list.id ? openRow.side : null}
-        onOpenLeft={() => setOpenRow({ id: list.id, side: 'left' })}
-        onOpenRight={() => setOpenRow({ id: list.id, side: 'right' })}
-        onClose={() => setOpenRow((prev) => (prev?.id === list.id ? null : prev))}
+        openSide={openRow?.id === list.id && openRow.kind === 'list' ? openRow.side : null}
+        onOpenLeft={() => setOpenRow({ id: list.id, kind: 'list', side: 'left' })}
+        onOpenRight={() => setOpenRow({ id: list.id, kind: 'list', side: 'right' })}
+        onClose={() => setOpenRow((prev) => (prev?.id === list.id && prev.kind === 'list' ? null : prev))}
         onSharePress={() => handleShare(list)}
         onMovePress={() => handleMove(list)}
         onDeletePress={() => handleDelete(list)}

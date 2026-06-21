@@ -75,6 +75,22 @@ export async function createList(req: Request, res: Response): Promise<void> {
   res.status(201).json({ data: result, message: 'List created' });
 }
 
+/** POST /api/v1/lists/folders/:id/pin */
+export async function pinFolder(req: Request, res: Response): Promise<void> {
+  const folderId = parseId(String(req.params['id']), 'folder ID');
+  const userId = req.user!.userId;
+  await listsService.pinFolderService(userId, folderId);
+  res.status(200).json({ message: 'Folder pinned' });
+}
+
+/** DELETE /api/v1/lists/folders/:id/pin */
+export async function unpinFolder(req: Request, res: Response): Promise<void> {
+  const folderId = parseId(String(req.params['id']), 'folder ID');
+  const userId = req.user!.userId;
+  await listsService.unpinFolderService(userId, folderId);
+  res.status(200).json({ message: 'Folder unpinned' });
+}
+
 /** POST /api/v1/lists/:id/pin */
 export async function pinList(req: Request, res: Response): Promise<void> {
   const listId = parseId(String(req.params['id']), 'list ID');
