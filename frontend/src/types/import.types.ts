@@ -4,6 +4,7 @@ export type ImportStatus = 'pending' | 'processing' | 'completed' | 'failed';
 /** Stage the backend importer is currently working through. */
 export type ImportStep =
   | 'preparing'
+  | 'profile'
   | 'diary'
   | 'ratings'
   | 'watchlist'

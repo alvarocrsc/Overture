@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
+  Easing,
   FadeInDown,
   FadeOutUp,
+  runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -29,6 +32,7 @@ const DISMISS_DELAY_MS = 3500;
 /** User-facing status line for each backend stage. */
 const STEP_MESSAGES: Record<ImportStep, string> = {
   preparing: 'Preparing your import…',
+  profile: 'Setting up your profile…',
   diary: 'Importing your diary…',
   ratings: 'Adding your ratings…',
   watchlist: 'Updating your watchlist…',
@@ -86,16 +90,31 @@ export default function ImportProgressBanner(): React.JSX.Element | null {
     return () => clearTimeout(timer);
   }, [isTerminal, clearTracking]);
 
-  // Smoothly animate the fill toward the latest fraction on each poll.
+  // Glide the fill toward the latest fraction. The long, linear timing makes the
+  // bar crawl continuously between the 2s polls instead of snapping to each new
+  // value, so a jump like 44%→56% reads as smooth, progressive motion.
   const fraction = progressFraction(job);
   const fillWidth = useSharedValue(0);
   useEffect(() => {
-    fillWidth.value = withTiming(fraction, { duration: 450 });
+    fillWidth.value = withTiming(fraction, {
+      duration: 1900,
+      easing: Easing.linear,
+    });
   }, [fraction, fillWidth]);
 
   const fillStyle = useAnimatedStyle(() => ({
     width: `${fillWidth.value * 100}%`,
   }));
+
+  // Drive the percentage label off the same animated value so it counts up in
+  // lockstep with the bar, re-rendering only when the rounded value changes.
+  const [shownPercent, setShownPercent] = useState(0);
+  useAnimatedReaction(
+    () => Math.round(fillWidth.value * 100),
+    (current, previous) => {
+      if (current !== previous) runOnJS(setShownPercent)(current);
+    },
+  );
 
   if (!isTracking) return null;
 
@@ -114,7 +133,7 @@ export default function ImportProgressBanner(): React.JSX.Element | null {
         </Text>
 
         <View style={styles.midRow}>
-          <Text style={styles.percent}>{`${Math.round(fraction * 100)}%`}</Text>
+          <Text style={styles.percent}>{`${shownPercent}%`}</Text>
           <Text
             style={[styles.status, isFailed && styles.statusError]}
             numberOfLines={1}
@@ -171,7 +190,7 @@ const styles = StyleSheet.create({
     // title → detail line gap. Paired with midRow.marginBottom (13) this also
     // lands the percentage on the banner's vertical centre, level with the
     // logo: the 10px difference equals title lineHeight (16) − track height (6).
-    marginBottom: 3,
+    marginBottom: -5,
   },
   titleAccent: {
     fontFamily: FontFamily.black,
@@ -181,7 +200,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    marginBottom: 13,
+    marginBottom: 6,
   },
   percent: {
     fontFamily: FontFamily.black,
@@ -194,7 +213,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginLeft: 8,
     fontFamily: FontFamily.light,
-    fontSize: FontSize.micro,
+    fontSize: FontSize.tiny,
     color: Colors.textMuted,
     textAlign: 'right',
     letterSpacing: LetterSpacing.tight,

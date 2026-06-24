@@ -1,4 +1,5 @@
 import AdmZip from 'adm-zip';
+import axios from 'axios';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
 import { query, execute } from '../config/db';
@@ -16,6 +17,10 @@ const TMDB_THROTTLE_MS = 80;
 
 /** Maximum number of row-level errors persisted to `import_jobs.error_log`. */
 const MAX_LOGGED_ERRORS = 50;
+
+/** Browser-like UA so boxd.it / Letterboxd serve normal redirects, not a block. */
+const IMPORT_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
 /** Per-job state threaded through every row importer. */
 interface ImportContext {
@@ -157,6 +162,7 @@ async function processImportJob(
   const watchlistRows = parseCsv(zip, 'watchlist.csv');
   const reviewsRows = parseCsv(zip, 'reviews.csv');
   const likedRows = parseCsv(zip, 'likes/films.csv');
+  const profileRows = parseCsv(zip, 'profile.csv');
 
   // TODO: watched.csv — films watched without a star. `ratings.value` is NOT
   //   NULL (0.5–5.0), so watch-only entries can't be stored without making the
@@ -169,6 +175,15 @@ async function processImportJob(
 
   const total = diaryRows.length + watchlistRows.length + likedRows.length;
   await execute(`UPDATE import_jobs SET total_items = ? WHERE id = ?`, [total, jobId]);
+
+  // 0. profile.csv — display name, bio and favourite films. Best-effort: a
+  //    malformed profile must never fail the whole import.
+  await setStep(jobId, 'profile');
+  try {
+    await importProfile(ctx, profileRows);
+  } catch (err) {
+    errors.push(`profile: ${describeError(err)}`);
+  }
 
   // 1. diary.csv (primary ratings source, counted).
   await setStep(jobId, 'diary');
@@ -216,9 +231,10 @@ async function processImportJob(
   // job row alone — e.g. a ratings.csv that parsed empty (download/zip problem)
   // vs. one that resolved entirely to films the diary already created.
   const summary =
-    `[import summary] parsed rows — diary:${diaryRows.length} ` +
-    `ratings:${ratingsRows.length} watchlist:${watchlistRows.length} ` +
-    `likes:${likedRows.length} reviews:${reviewsRows.length}; ` +
+    `[import summary] parsed rows — profile:${profileRows.length} ` +
+    `diary:${diaryRows.length} ratings:${ratingsRows.length} ` +
+    `watchlist:${watchlistRows.length} likes:${likedRows.length} ` +
+    `reviews:${reviewsRows.length}; ` +
     `ratings.csv — new:${ratingsNew} duplicate:${ratingsDuplicate} errored:${ratingsErrored}`;
   const log = [summary, ...errors].slice(0, MAX_LOGGED_ERRORS + 1);
 
@@ -390,6 +406,149 @@ async function importReviewRow(ctx: ImportContext, row: Record<string, string>):
      VALUES (?, ?, ?, ?, 0, ?)`,
     [rating.id, ctx.userId, ctx.jobId, body, parseLbDate(row['Date'])],
   );
+}
+
+// ─── Profile (name, bio, favourites) ─────────────────────────────────────────
+
+/** A film reference parsed from the profile.csv "Favorite Films" cell. */
+interface FavoriteFilmRef {
+  name: string;
+  year: string;
+}
+
+/**
+ * Applies profile.csv: the user's display name, bio and favourite films. Only
+ * fields the export actually provides are written, so importing never blanks
+ * out values the user may already have set in Overture.
+ */
+async function importProfile(
+  ctx: ImportContext,
+  rows: Record<string, string>[],
+): Promise<void> {
+  const [profile] = rows;
+  if (!profile) return;
+
+  const name = profile['Given Name']?.trim();
+  if (name) {
+    await execute(`UPDATE users SET name = ? WHERE id = ?`, [name, ctx.userId]);
+  }
+  const bio = profile['Bio']?.trim();
+  if (bio) {
+    await execute(`UPDATE users SET bio = ? WHERE id = ?`, [bio, ctx.userId]);
+  }
+
+  await importFavoriteFilms(ctx, profile['Favorite Films']);
+}
+
+/**
+ * Resolves up to four favourite films and replaces the user's favourites with
+ * them, preserving the export's order. Films that don't resolve on TMDB are
+ * skipped; favourites are only rewritten when at least one resolves, so a
+ * profile without favourites leaves any existing ones untouched.
+ */
+async function importFavoriteFilms(
+  ctx: ImportContext,
+  raw: string | undefined,
+): Promise<void> {
+  const tokens = parseFavoriteTokens(raw);
+  if (tokens.length === 0) return;
+
+  const filmIds: number[] = [];
+  for (const token of tokens) {
+    if (filmIds.length === 4) break;
+    try {
+      const ref = await resolveFavoriteRef(token);
+      if (!ref) continue;
+      const filmId = await resolveFilm(ctx, ref.name, ref.year);
+      if (!filmIds.includes(filmId)) filmIds.push(filmId);
+    } catch {
+      // A favourite that can't be matched is simply skipped.
+    }
+    await sleep(TMDB_THROTTLE_MS);
+  }
+  if (filmIds.length === 0) return;
+
+  await execute(`DELETE FROM user_favorites WHERE user_id = ?`, [ctx.userId]);
+  for (const [index, filmId] of filmIds.entries()) {
+    await execute(
+      `INSERT INTO user_favorites (user_id, film_id, series_id, position)
+       VALUES (?, ?, NULL, ?)`,
+      [ctx.userId, filmId, index + 1],
+    );
+  }
+}
+
+/** Splits the "Favorite Films" cell into its comma-separated entries. */
+function parseFavoriteTokens(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * Turns one "Favorite Films" entry into a resolvable (name, year) reference.
+ * Letterboxd exports favourites as boxd.it short links, which 301-redirect to
+ * the canonical letterboxd.com/film/<slug>/ URL; we follow that one hop and read
+ * the slug. Full film URLs and plain titles are also accepted. Returns null when
+ * the entry can't be turned into a usable reference.
+ */
+async function resolveFavoriteRef(token: string): Promise<FavoriteFilmRef | null> {
+  let url = token;
+  if (/^https?:\/\/boxd\.it\//i.test(token)) {
+    const expanded = await expandBoxdLink(token);
+    if (!expanded) return null;
+    url = expanded;
+  }
+
+  const filmAt = url.indexOf('/film/');
+  if (filmAt !== -1) {
+    const segments = url
+      .slice(filmAt + '/film/'.length)
+      .replace(/\/+$/, '')
+      .split('/');
+    const slug = segments[0];
+    if (!slug) return null;
+    return splitTrailingYear(slug.replace(/-/g, ' ').trim());
+  }
+
+  // Plain title fallback, possibly "Title (YYYY)".
+  const titled = token.match(/^(.*)\((\d{4})\)\s*$/);
+  if (titled) {
+    const [, name = '', year = ''] = titled;
+    return { name: name.trim(), year };
+  }
+  return { name: token, year: '' };
+}
+
+/**
+ * Follows a boxd.it short link's redirect and returns its target URL (the
+ * canonical letterboxd.com/film/<slug>/ page), or null if it can't be followed.
+ */
+async function expandBoxdLink(shortUrl: string): Promise<string | null> {
+  try {
+    const res = await axios.get(shortUrl, {
+      maxRedirects: 0,
+      timeout: 8000,
+      validateStatus: (status) => status >= 200 && status < 400,
+      headers: { 'User-Agent': IMPORT_USER_AGENT },
+    });
+    const location = res.headers['location'];
+    return typeof location === 'string' ? location : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Splits a trailing 4-digit year off a space-joined slug ("whiplash 2014"). */
+function splitTrailingYear(words: string): FavoriteFilmRef {
+  const match = words.match(/^(.*?)\s(\d{4})$/);
+  if (match) {
+    const [, name = '', year = ''] = match;
+    return { name: name.trim(), year };
+  }
+  return { name: words, year: '' };
 }
 
 // ─── TMDB resolution ──────────────────────────────────────────────────────────

@@ -64,6 +64,7 @@ export const FontSize = {
   subtitle: 14,
   caption: 12,
   small: 13,
+  tiny: 11,
   micro: 10,
 } as const;
 
