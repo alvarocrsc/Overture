@@ -101,7 +101,7 @@ export default function ListDetailScreen(): React.JSX.Element {
 
   const contentPadding = {
     paddingTop: insets.top + 8,
-    paddingBottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + 16,
+    paddingBottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + 100,
   };
 
   return (

@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -77,7 +77,9 @@ export default function SettingsScreen(): React.JSX.Element {
         <Row
           icon={<Ionicons name="cloud-upload-outline" size={24} color={Colors.white} />}
           label="Import from Letterboxd"
-          onPress={() => notImplemented('Import from Letterboxd')}
+          // `/import/letterboxd` is a new route; the generated typed-routes union
+          // picks it up on the next `expo start`. Cast until then (see api.ts).
+          onPress={() => router.push('/import/letterboxd' as unknown as Href)}
         />
         <Row
           icon={<Ionicons name="log-out-outline" size={26} color={Colors.errorRed} />}

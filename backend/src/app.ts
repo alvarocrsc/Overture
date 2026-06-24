@@ -14,6 +14,7 @@ import watchlistRoutes from './routes/watchlist.routes';
 import listsRoutes from './routes/lists.routes';
 import searchRoutes from './routes/search.routes';
 import statsRoutes from './routes/stats.routes';
+import importRoutes from './routes/import.routes';
 
 import { errorHandler } from './middleware/errorHandler';
 
@@ -49,6 +50,7 @@ app.use('/api/v1/watchlist', watchlistRoutes);
 app.use('/api/v1/lists', listsRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/stats', statsRoutes);
+app.use('/api/v1/import', importRoutes);
 
 // ─── Global Error Handler ────────────────────────────────────────────────────
 // Must be registered last. Express 5 automatically forwards thrown errors from

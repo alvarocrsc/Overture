@@ -90,6 +90,7 @@ function RootLayoutNav() {
                   <Stack.Screen name="log" options={{ headerShown: false }} />
                   <Stack.Screen name="review/[id]" options={{ headerShown: false }} />
                   <Stack.Screen name="settings" options={{ headerShown: false }} />
+                  <Stack.Screen name="import/letterboxd" options={{ headerShown: false }} />
                   <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                 </Stack>
                 <OverlayHost />
