@@ -16,6 +16,7 @@ export interface ImportJob {
   skipped_items: number;
   failed_items: number;
   error_log: string[] | null;
+  current_step: string | null;
   started_at: Date | null;
   completed_at: Date | null;
   created_at: Date;

@@ -39,6 +39,10 @@ export const Colors = {
   cardBackground: '#171717',
   /** Star rating fill */
   starGold: '#F5B800',
+  /** Import progress banner card background — #292929 */
+  bannerBackground: '#292929',
+  /** Import progress bar track (light) — #d9d9d9 */
+  importTrack: '#d9d9d9',
 } as const;
 
 // ─── Typography ──────────────────────────────────────────────────────────────
@@ -60,6 +64,7 @@ export const FontSize = {
   subtitle: 14,
   caption: 12,
   small: 13,
+  micro: 10,
 } as const;
 
 export const LetterSpacing = {

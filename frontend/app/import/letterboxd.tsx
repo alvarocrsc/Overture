@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,7 +11,7 @@ import {
   useSafeAreaInsets,
   type EdgeInsets,
 } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
+import { WebView, type WebViewNavigation } from 'react-native-webview';
 import CookieManager from '@react-native-cookies/cookies';
 // `expo-file-system`'s top-level export is the new File/Directory API in SDK 55;
 // downloadAsync / cacheDirectory / getInfoAsync live under the `/legacy` entry.
@@ -28,8 +28,8 @@ import {
   Radius,
   Spacing,
 } from '@/src/lib/colors';
-import { useImportJobStatus, useUploadImport } from '@/src/hooks/use-import';
-import type { ImportJob } from '@/src/types/import.types';
+import { useUploadImport } from '@/src/hooks/use-import';
+import { useImport } from '@/src/context/ImportContext';
 
 /** The Letterboxd sign-in page, redirected to the export page once authenticated. */
 const SIGN_IN_URL = 'https://letterboxd.com/sign-in/?next=/data/export/';
@@ -39,7 +39,30 @@ const EXPORT_URL = 'https://letterboxd.com/data/export/';
 const IOS_SAFARI_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
-type Phase = 'landing' | 'webview' | 'downloading' | 'importing' | 'done' | 'error';
+/** Origin every Letterboxd URL shares; used to classify in-WebView navigations. */
+const LETTERBOXD_ORIGIN = 'https://letterboxd.com';
+/**
+ * Path prefixes that are part of the sign-in flow itself (or Cloudflare's
+ * challenge). Landing on any *other* letterboxd.com page means the AJAX login
+ * succeeded — Letterboxd ignores `?next=` and bounces to the homepage, so we
+ * can't rely on reaching the export URL to know we're authenticated.
+ */
+const AUTH_PATH_PREFIXES = [
+  '/sign-in',
+  '/sign-up',
+  '/create-account',
+  '/forgotten-password',
+  '/cdn-cgi',
+];
+
+/** True once the WebView lands on a logged-in Letterboxd page (not an auth page). */
+function isLoggedInLanding(url: string): boolean {
+  if (!url.startsWith(LETTERBOXD_ORIGIN)) return false;
+  const path = url.slice(LETTERBOXD_ORIGIN.length);
+  return !AUTH_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+type Phase = 'landing' | 'webview' | 'downloading' | 'error';
 
 /**
  * Import from Letterboxd screen.
@@ -53,23 +76,14 @@ export default function LetterboxdImportScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<Phase>('landing');
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const [activeJobId, setActiveJobId] = useState<number | null>(null);
 
   const uploadImport = useUploadImport();
-  const jobStatusQuery = useImportJobStatus(activeJobId);
-  const job = jobStatusQuery.data ?? null;
-  const status = job?.status;
-
-  // Advance to the summary once the backend job reaches a terminal state.
-  useEffect(() => {
-    if (status === 'completed' || status === 'failed') {
-      setPhase('done');
-    }
-  }, [status]);
+  const { startTracking } = useImport();
 
   /**
    * Extracts the WKWebView session cookies, downloads the export ZIP with them,
-   * uploads it, and stores the new job id so polling can begin.
+   * uploads it, then hands the new job to the app-wide tracker and returns the
+   * user to the app — progress is shown by the floating banner from there.
    */
   const handleLoginSuccess = useCallback(async (): Promise<void> => {
     setPhase('downloading');
@@ -111,32 +125,28 @@ export default function LetterboxdImportScreen(): React.JSX.Element {
         throw new Error('The downloaded file appears to be empty. Please try again.');
       }
 
-      setPhase('importing');
       const jobId = await uploadImport.mutateAsync(downloadResult.uri);
-      setActiveJobId(jobId);
-
       void FileSystem.deleteAsync(downloadResult.uri, { idempotent: true }).catch(
         () => {},
       );
+
+      // Track the job app-wide and drop the user onto their profile; the
+      // floating ImportProgressBanner shows live progress until it completes.
+      startTracking(jobId);
+      router.replace('/(tabs)/profile');
     } catch (err) {
       setErrorMessage(
         err instanceof Error ? err.message : 'An unexpected error occurred.',
       );
       setPhase('error');
     }
-  }, [uploadImport]);
+  }, [uploadImport, startTracking]);
 
   const handleRetry = useCallback((): void => {
     // Clearing cookies also ends the Letterboxd session so a fresh login runs.
     void CookieManager.clearAll();
     setErrorMessage('');
-    setActiveJobId(null);
     setPhase('landing');
-  }, []);
-
-  const handleDone = useCallback((): void => {
-    // Land on the profile so the user sees their updated stats immediately.
-    router.replace('/(tabs)/profile');
   }, []);
 
   if (phase === 'webview') {
@@ -160,10 +170,6 @@ export default function LetterboxdImportScreen(): React.JSX.Element {
       )}
       {phase === 'downloading' && (
         <CenteredStatus text="Downloading your Letterboxd data…" />
-      )}
-      {phase === 'importing' && <ImportingPhase job={job} />}
-      {phase === 'done' && (
-        <DonePhase job={job} insets={insets} onDone={handleDone} />
       )}
       {phase === 'error' && (
         <ErrorPhase
@@ -236,6 +242,28 @@ function WebViewPhase({
   onLoginSuccess,
   onCancel,
 }: WebViewPhaseProps): React.JSX.Element {
+  // The homepage emits several navigation-state updates as it settles, so guard
+  // against kicking off the download more than once.
+  const handledLogin = useRef(false);
+
+  const triggerLogin = useCallback((): void => {
+    if (handledLogin.current) return;
+    handledLogin.current = true;
+    void onLoginSuccess();
+  }, [onLoginSuccess]);
+
+  const handleNavigationStateChange = useCallback(
+    (navState: WebViewNavigation): void => {
+      // Letterboxd's AJAX sign-in ignores `?next=` and redirects to the
+      // homepage. Leaving the auth pages for any other letterboxd.com page is
+      // our signal that the session cookies now exist and we can download.
+      if (isLoggedInLanding(navState.url)) {
+        triggerLogin();
+      }
+    },
+    [triggerLogin],
+  );
+
   return (
     <View style={[styles.webviewWrap, { paddingTop: insets.top }]}>
       <WebView
@@ -246,15 +274,26 @@ function WebViewPhase({
         domStorageEnabled
         startInLoadingState
         userAgent={IOS_SAFARI_UA}
+        // Letterboxd's login renders a Cloudflare challenge inside an
+        // `about:srcdoc` iframe. The default originWhitelist (http/https only)
+        // makes the WebView hand non-matching URLs to Linking.openURL, which
+        // fails for `about:srcdoc` and leaves the login hung. Allowing all
+        // origins keeps every navigation inside the WebView.
+        originWhitelist={['*']}
+        // Some sign-in buttons call window.open / target="_blank"; load those
+        // in place instead of attempting (and failing) to spawn a new window.
+        setSupportMultipleWindows={false}
+        onNavigationStateChange={handleNavigationStateChange}
         onShouldStartLoadWithRequest={(request) => {
-          // Navigation to the export URL means login succeeded and Letterboxd is
-          // about to stream the ZIP — intercept it rather than let the WebView
-          // try to render the binary response.
+          // Safety net: if Letterboxd ever does honour `?next=` and navigates
+          // straight to the export endpoint, intercept it so the WebView
+          // doesn't try to render the binary ZIP. Login is normally detected by
+          // onNavigationStateChange above.
           if (
             request.url === EXPORT_URL ||
             request.url.startsWith('https://letterboxd.com/data/export?')
           ) {
-            void onLoginSuccess();
+            triggerLogin();
             return false;
           }
           return true;
@@ -283,102 +322,6 @@ function CenteredStatus({ text }: { text: string }): React.JSX.Element {
     <View style={styles.centered}>
       <ActivityIndicator color={Colors.white} size="large" />
       <Text style={styles.centeredText}>{text}</Text>
-    </View>
-  );
-}
-
-// ─── Importing ───────────────────────────────────────────────────────────────
-
-/** Live progress while the backend works through the import. */
-function ImportingPhase({ job }: { job: ImportJob | null }): React.JSX.Element {
-  const total = job?.total_items ?? 0;
-  const imported = job?.imported_items ?? 0;
-  const counting = total === 0;
-  const pct = counting ? 0 : Math.min(imported / total, 1);
-
-  return (
-    <View style={styles.centered}>
-      {counting ? (
-        <ActivityIndicator color={Colors.white} size="large" />
-      ) : (
-        <View style={styles.progressTrack}>
-          {/* Width is the only dynamic value — inline per the styling rules. */}
-          <View style={[styles.progressFill, { width: `${pct * 100}%` }]} />
-        </View>
-      )}
-      <Text style={styles.importingTitle}>
-        {counting ? 'Preparing your import…' : `Importing… ${imported} of ${total}`}
-      </Text>
-      <Text style={styles.importingSubtitle}>
-        This may take a minute. You can leave this screen and come back — the
-        import keeps running.
-      </Text>
-    </View>
-  );
-}
-
-// ─── Done ────────────────────────────────────────────────────────────────────
-
-interface DonePhaseProps {
-  job: ImportJob | null;
-  insets: EdgeInsets;
-  onDone: () => void;
-}
-
-/** Summary of the finished import with the per-bucket counts. */
-function DonePhase({ job, insets, onDone }: DonePhaseProps): React.JSX.Element {
-  const imported = job?.imported_items ?? 0;
-  const skipped = job?.skipped_items ?? 0;
-  const failed = job?.failed_items ?? 0;
-  const hadErrors = failed > 0 || job?.status === 'failed';
-
-  return (
-    <View style={styles.phaseBody}>
-      <View style={styles.doneHeader}>
-        <Ionicons
-          name={hadErrors ? 'alert-circle' : 'checkmark-circle'}
-          size={56}
-          color={hadErrors ? Colors.errorRed : Colors.accentBlue}
-        />
-        <Text style={styles.title}>
-          {hadErrors ? 'Import finished\nwith errors' : 'Import complete'}
-        </Text>
-      </View>
-
-      <View style={styles.summaryCard}>
-        <SummaryRow value={imported} label="entries imported" color={Colors.accentBlue} />
-        <SummaryRow value={skipped} label="already existed" color={Colors.textMuted} />
-        {failed > 0 && (
-          <SummaryRow value={failed} label="failed" color={Colors.errorRed} />
-        )}
-      </View>
-      {failed > 0 && (
-        <Text style={styles.doneNote}>
-          Titles that couldn&apos;t be found on TMDB were skipped.
-        </Text>
-      )}
-
-      <View style={[styles.phaseFooter, { paddingBottom: insets.bottom + 16 }]}>
-        <PrimaryButton label="Done" onPress={onDone} />
-      </View>
-    </View>
-  );
-}
-
-/** A single number + label row inside the summary card. */
-function SummaryRow({
-  value,
-  label,
-  color,
-}: {
-  value: number;
-  label: string;
-  color: string;
-}): React.JSX.Element {
-  return (
-    <View style={styles.summaryRow}>
-      <Text style={[styles.summaryValue, { color }]}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
     </View>
   );
 }
@@ -466,7 +409,7 @@ const styles = StyleSheet.create({
   landingFooter: {
     paddingHorizontal: Spacing.screenH,
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 100,
     alignItems: 'center',
   },
   // WebView
@@ -509,80 +452,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     color: Colors.white,
     textAlign: 'center',
-    letterSpacing: LetterSpacing.tight,
-    includeFontPadding: false,
-  },
-  // Importing
-  progressTrack: {
-    width: '100%',
-    height: 10,
-    borderRadius: Radius.progress,
-    backgroundColor: Colors.progressTrack,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: Radius.progress,
-    backgroundColor: Colors.progressFill,
-  },
-  importingTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.inputLarge,
-    color: Colors.white,
-    textAlign: 'center',
-    letterSpacing: LetterSpacing.tight,
-    includeFontPadding: false,
-  },
-  importingSubtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.subtitle,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-    letterSpacing: LetterSpacing.tight,
-    includeFontPadding: false,
-  },
-  // Done
-  doneHeader: {
-    alignItems: 'center',
-    gap: 16,
-    paddingTop: 48,
-    paddingHorizontal: Spacing.screenH,
-  },
-  summaryCard: {
-    marginTop: 32,
-    marginHorizontal: Spacing.screenH,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: Radius.sheet,
-    paddingVertical: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  summaryValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.inputLarge,
-    letterSpacing: LetterSpacing.tight,
-    includeFontPadding: false,
-    minWidth: 44,
-  },
-  summaryLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    color: Colors.textMuted,
-    letterSpacing: LetterSpacing.tight,
-    includeFontPadding: false,
-  },
-  doneNote: {
-    marginTop: 14,
-    marginHorizontal: Spacing.screenH,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
     letterSpacing: LetterSpacing.tight,
     includeFontPadding: false,
   },

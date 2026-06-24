@@ -116,7 +116,7 @@ export async function startImportJob(userId: number, zipFilePath: string): Promi
 export async function getImportJob(jobId: number, userId: number): Promise<ImportJob | null> {
   const [job] = await query<ImportJob>(
     `SELECT id, user_id, status, total_items, imported_items, skipped_items,
-            failed_items, error_log, started_at, completed_at, created_at, updated_at
+            failed_items, error_log, current_step, started_at, completed_at, created_at, updated_at
      FROM import_jobs
      WHERE id = ? AND user_id = ?`,
     [jobId, userId],
@@ -136,8 +136,8 @@ async function processImportJob(
   zipFilePath: string,
 ): Promise<void> {
   await execute(
-    `UPDATE import_jobs SET status = ?, started_at = NOW() WHERE id = ?`,
-    ['processing', jobId],
+    `UPDATE import_jobs SET status = ?, started_at = NOW(), current_step = ? WHERE id = ?`,
+    ['processing', 'preparing', jobId],
   );
 
   const ctx: ImportContext = { userId, jobId };
@@ -165,10 +165,12 @@ async function processImportJob(
   await execute(`UPDATE import_jobs SET total_items = ? WHERE id = ?`, [total, jobId]);
 
   // 1. diary.csv (primary ratings source, counted).
+  await setStep(jobId, 'diary');
   await runCountedSource(ctx, 'diary', diaryRows, importDiaryRow, errors);
 
   // 2. ratings.csv (supplementary — fills gaps for films rated outside the
   //    diary). Not counted: most rows already exist from diary.csv.
+  await setStep(jobId, 'ratings');
   for (const row of ratingsRows) {
     try {
       await importRatingRow(ctx, row);
@@ -179,13 +181,16 @@ async function processImportJob(
   }
 
   // 3. watchlist.csv (counted).
+  await setStep(jobId, 'watchlist');
   await runCountedSource(ctx, 'watchlist', watchlistRows, importWatchlistRow, errors);
 
   // 4. likes/films.csv → title_likes (counted).
+  await setStep(jobId, 'likes');
   await runCountedSource(ctx, 'likes', likedRows, importLikedFilmRow, errors);
 
   // 5. reviews.csv — attach to an existing rating. Best-effort: review import
   //    failures are never surfaced to the user.
+  await setStep(jobId, 'reviews');
   for (const row of reviewsRows) {
     try {
       await importReviewRow(ctx, row);
@@ -422,6 +427,11 @@ async function cacheFilm(tmdbId: number): Promise<number> {
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
+
+/** Records the stage the importer is on for live client feedback. */
+async function setStep(jobId: number, step: string): Promise<void> {
+  await execute(`UPDATE import_jobs SET current_step = ? WHERE id = ?`, [step, jobId]);
+}
 
 /** Resolves after `ms` milliseconds. */
 function sleep(ms: number): Promise<void> {

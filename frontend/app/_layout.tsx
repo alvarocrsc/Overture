@@ -19,9 +19,11 @@ import {
 
 import { useColorScheme } from '@/components/useColorScheme';
 import AuthProvider from '@/src/context/AuthContext';
+import ImportProvider from '@/src/context/ImportContext';
 import { OverlayNavigatorProvider } from '@/src/context/OverlayNavigatorContext';
 import OverlayHost from '@/src/components/shared/OverlayHost';
 import GlobalTabBar from '@/src/components/shared/GlobalTabBar';
+import ImportProgressBanner from '@/src/components/shared/ImportProgressBanner';
 
 const queryClient = new QueryClient();
 
@@ -75,28 +77,31 @@ function RootLayoutNav() {
       <QueryClientProvider client={queryClient}>
         <KeyboardProvider>
           <AuthProvider>
-            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-              <OverlayNavigatorProvider>
-                <Stack>
-                  <Stack.Screen name="index" options={{ headerShown: false }} />
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="film/[tmdbId]" options={{ headerShown: false }} />
-                  <Stack.Screen name="series/[tmdbId]" options={{ headerShown: false }} />
-                  <Stack.Screen name="list/[id]" options={{ headerShown: false }} />
-                  <Stack.Screen name="user-lists/[userId]" options={{ headerShown: false }} />
-                  <Stack.Screen name="lists/me" options={{ headerShown: false }} />
-                  <Stack.Screen name="lists/folder/[folderId]" options={{ headerShown: false }} />
-                  <Stack.Screen name="log" options={{ headerShown: false }} />
-                  <Stack.Screen name="review/[id]" options={{ headerShown: false }} />
-                  <Stack.Screen name="settings" options={{ headerShown: false }} />
-                  <Stack.Screen name="import/letterboxd" options={{ headerShown: false }} />
-                  <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                </Stack>
-                <OverlayHost />
-                <GlobalTabBar />
-              </OverlayNavigatorProvider>
-            </ThemeProvider>
+            <ImportProvider>
+              <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                <OverlayNavigatorProvider>
+                  <Stack>
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="film/[tmdbId]" options={{ headerShown: false }} />
+                    <Stack.Screen name="series/[tmdbId]" options={{ headerShown: false }} />
+                    <Stack.Screen name="list/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="user-lists/[userId]" options={{ headerShown: false }} />
+                    <Stack.Screen name="lists/me" options={{ headerShown: false }} />
+                    <Stack.Screen name="lists/folder/[folderId]" options={{ headerShown: false }} />
+                    <Stack.Screen name="log" options={{ headerShown: false }} />
+                    <Stack.Screen name="review/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="settings" options={{ headerShown: false }} />
+                    <Stack.Screen name="import/letterboxd" options={{ headerShown: false }} />
+                    <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                  </Stack>
+                  <OverlayHost />
+                  <GlobalTabBar />
+                  <ImportProgressBanner />
+                </OverlayNavigatorProvider>
+              </ThemeProvider>
+            </ImportProvider>
           </AuthProvider>
         </KeyboardProvider>
       </QueryClientProvider>
