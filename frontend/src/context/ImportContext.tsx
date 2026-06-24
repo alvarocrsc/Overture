@@ -1,7 +1,35 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useImportJobStatus } from '@/src/hooks/use-import';
 import type { ImportJob } from '@/src/types/import.types';
+
+/**
+ * Query roots an import writes to (ratings, watchlist, likes, reviews and the
+ * counts derived from them). Invalidated when a job finishes so the profile
+ * reflects the new totals instead of the counts cached when we navigated away
+ * mid-import. Mirrors the set the film/series action hooks invalidate.
+ */
+const IMPORT_AFFECTED_QUERY_KEYS = [
+  'profile',
+  'stats',
+  'rating-distribution',
+  'user-favorites',
+  'films',
+  'ratings',
+  'watchlist',
+  'logged',
+  'recent-activity',
+  'divides',
+  'friends-activity',
+] as const;
 
 export interface ImportContextType {
   /** The job currently being tracked, or null before the first poll resolves. */
@@ -40,8 +68,24 @@ export default function ImportProvider({
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
+  const queryClient = useQueryClient();
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const { data } = useImportJobStatus(activeJobId);
+
+  // When the tracked job reaches a terminal state, refresh the queries it wrote
+  // to. We navigate to the profile the moment the upload succeeds, so without
+  // this the screen keeps showing the counts cached before the import ran. The
+  // ref guards against re-invalidating on every subsequent poll of the same job.
+  const refreshedJobId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    if (data.status !== 'completed' && data.status !== 'failed') return;
+    if (refreshedJobId.current === data.id) return;
+    refreshedJobId.current = data.id;
+    for (const key of IMPORT_AFFECTED_QUERY_KEYS) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  }, [data, queryClient]);
 
   const startTracking = useCallback((jobId: number): void => {
     setActiveJobId(jobId);

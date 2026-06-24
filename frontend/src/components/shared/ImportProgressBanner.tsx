@@ -104,7 +104,7 @@ export default function ImportProgressBanner(): React.JSX.Element | null {
       entering={FadeInDown.duration(280)}
       exiting={FadeOutUp.duration(220)}
       pointerEvents="none"
-      style={[styles.container, { top: insets.top + 8 }]}
+      style={[styles.container, { top: insets.top + 16 }]}
     >
       <Image source={letterboxdLogo} style={styles.logo} resizeMode="contain" />
 
@@ -158,7 +158,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    gap: 5,
     justifyContent: 'center',
   },
   title: {
@@ -169,6 +168,10 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     letterSpacing: LetterSpacing.tight,
     includeFontPadding: false,
+    // title → detail line gap. Paired with midRow.marginBottom (13) this also
+    // lands the percentage on the banner's vertical centre, level with the
+    // logo: the 10px difference equals title lineHeight (16) − track height (6).
+    marginBottom: 3,
   },
   titleAccent: {
     fontFamily: FontFamily.black,
@@ -178,6 +181,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
+    marginBottom: 13,
   },
   percent: {
     fontFamily: FontFamily.black,

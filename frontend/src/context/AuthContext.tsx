@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import { router } from 'expo-router';
+import CookieManager from '@react-native-cookies/cookies';
 import api from '../lib/api';
 import { clearToken, getToken, setToken } from '../lib/token';
 
@@ -94,6 +95,10 @@ export default function AuthProvider({
    */
   const applyCredentials = useCallback(
     async (accessToken: string, userData: User): Promise<void> => {
+      // Drop any Letterboxd WebView session left by a previous account so a
+      // newly authenticated user is asked for their own Letterboxd credentials
+      // on import instead of silently reusing the prior session.
+      await CookieManager.clearAll().catch((): void => {});
       await setToken(accessToken);
       setUser(userData);
     },
@@ -147,6 +152,9 @@ export default function AuthProvider({
       // best effort — ignore server errors on logout
     });
     await clearToken();
+    // End the Letterboxd WebView session too, so the next account to sign in
+    // can't reuse this user's import login.
+    await CookieManager.clearAll().catch((): void => {});
     setUser(null);
     router.replace('/login');
   }, []);

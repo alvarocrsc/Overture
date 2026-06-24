@@ -169,12 +169,18 @@ async function processImportJob(
   await runCountedSource(ctx, 'diary', diaryRows, importDiaryRow, errors);
 
   // 2. ratings.csv (supplementary — fills gaps for films rated outside the
-  //    diary). Not counted: most rows already exist from diary.csv.
+  //    diary). Tallied (not counted toward total_items) for the summary below.
   await setStep(jobId, 'ratings');
+  let ratingsNew = 0;
+  let ratingsDuplicate = 0;
+  let ratingsErrored = 0;
   for (const row of ratingsRows) {
     try {
-      await importRatingRow(ctx, row);
+      const outcome = await importRatingRow(ctx, row);
+      if (outcome === 'imported') ratingsNew += 1;
+      else ratingsDuplicate += 1;
     } catch (err) {
+      ratingsErrored += 1;
       errors.push(`ratings: ${row['Name']} (${row['Year']}): ${describeError(err)}`);
     }
     await sleep(TMDB_THROTTLE_MS);
@@ -199,15 +205,22 @@ async function processImportJob(
     }
   }
 
+  // One-line, human-readable summary of what each CSV contributed, stored at
+  // the head of error_log so an under-delivering import is diagnosable from the
+  // job row alone — e.g. a ratings.csv that parsed empty (download/zip problem)
+  // vs. one that resolved entirely to films the diary already created.
+  const summary =
+    `[import summary] parsed rows — diary:${diaryRows.length} ` +
+    `ratings:${ratingsRows.length} watchlist:${watchlistRows.length} ` +
+    `likes:${likedRows.length} reviews:${reviewsRows.length}; ` +
+    `ratings.csv — new:${ratingsNew} duplicate:${ratingsDuplicate} errored:${ratingsErrored}`;
+  const log = [summary, ...errors].slice(0, MAX_LOGGED_ERRORS + 1);
+
   await execute(
     `UPDATE import_jobs
        SET status = ?, completed_at = NOW(), error_log = ?
      WHERE id = ?`,
-    [
-      'completed',
-      errors.length > 0 ? JSON.stringify(errors.slice(0, MAX_LOGGED_ERRORS)) : null,
-      jobId,
-    ],
+    ['completed', JSON.stringify(log), jobId],
   );
 
   tryDeleteFile(zipFilePath);
@@ -292,21 +305,26 @@ async function importDiaryRow(ctx: ImportContext, row: Record<string, string>): 
  * Supplementary to diary.csv — only fills the star when no diary entry exists;
  * never overwrites a diary-sourced watched_on or letterboxd_uri.
  */
-async function importRatingRow(ctx: ImportContext, row: Record<string, string>): Promise<void> {
+async function importRatingRow(
+  ctx: ImportContext,
+  row: Record<string, string>,
+): Promise<RowOutcome> {
   const ratingRaw = row['Rating'];
-  if (!ratingRaw) return; // value is NOT NULL — nothing to store without a star.
+  if (!ratingRaw) return 'skipped'; // value is NOT NULL — nothing to store without a star.
   const filmId = await resolveFilm(row['Name'], row['Year']);
   const value = parseFloat(ratingRaw);
   const watchedOn = parseLbDate(row['Date']);
   const lbUri = row['Letterboxd URI'] || null;
 
-  await execute(
+  const result = await execute(
     `INSERT INTO ratings
        (user_id, film_id, import_job_id, value, watched_on, is_rewatch, letterboxd_uri)
      VALUES (?, ?, ?, ?, ?, 0, ?)
      ON DUPLICATE KEY UPDATE value = COALESCE(VALUES(value), value)`,
     [ctx.userId, filmId, ctx.jobId, value, watchedOn, lbUri],
   );
+  // affectedRows: 1 = a film this user hadn't rated yet; 2/0 = already rated.
+  return result.affectedRows === 1 ? 'imported' : 'skipped';
 }
 
 /**
