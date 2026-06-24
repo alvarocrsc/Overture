@@ -17,10 +17,16 @@ const TMDB_THROTTLE_MS = 80;
 /** Maximum number of row-level errors persisted to `import_jobs.error_log`. */
 const MAX_LOGGED_ERRORS = 50;
 
-/** Per-job identifiers threaded through every row importer. */
+/** Per-job state threaded through every row importer. */
 interface ImportContext {
   userId: number;
   jobId: number;
+  /**
+   * Memoises `(name, year)` → `films.id` for the lifetime of one import so every
+   * CSV (diary, ratings, watchlist, …) maps a given film to the *same* row and
+   * the `(user_id, film_id)` unique key can dedupe across them.
+   */
+  filmCache: Map<string, number>;
 }
 
 /**
@@ -140,7 +146,7 @@ async function processImportJob(
     ['processing', 'preparing', jobId],
   );
 
-  const ctx: ImportContext = { userId, jobId };
+  const ctx: ImportContext = { userId, jobId, filmCache: new Map() };
   const zip = new AdmZip(zipFilePath);
   const errors: string[] = [];
 
@@ -278,7 +284,7 @@ async function importDiaryRow(ctx: ImportContext, row: Record<string, string>): 
     // No star — see watched.csv TODO above. Counts as skipped, not failed.
     return 'skipped';
   }
-  const filmId = await resolveFilm(row['Name'], row['Year']);
+  const filmId = await resolveFilm(ctx, row['Name'], row['Year']);
   const value = parseFloat(ratingRaw);
   const watchedOn = parseLbDate(row['Watched Date']) ?? parseLbDate(row['Date']);
   const isRewatch = row['Rewatch'] === 'Yes';
@@ -311,7 +317,7 @@ async function importRatingRow(
 ): Promise<RowOutcome> {
   const ratingRaw = row['Rating'];
   if (!ratingRaw) return 'skipped'; // value is NOT NULL — nothing to store without a star.
-  const filmId = await resolveFilm(row['Name'], row['Year']);
+  const filmId = await resolveFilm(ctx, row['Name'], row['Year']);
   const value = parseFloat(ratingRaw);
   const watchedOn = parseLbDate(row['Date']);
   const lbUri = row['Letterboxd URI'] || null;
@@ -335,7 +341,7 @@ async function importWatchlistRow(
   ctx: ImportContext,
   row: Record<string, string>,
 ): Promise<RowOutcome> {
-  const filmId = await resolveFilm(row['Name'], row['Year']);
+  const filmId = await resolveFilm(ctx, row['Name'], row['Year']);
   const result = await execute(
     `INSERT IGNORE INTO watchlist (user_id, film_id, import_job_id) VALUES (?, ?, ?)`,
     [ctx.userId, filmId, ctx.jobId],
@@ -351,7 +357,7 @@ async function importLikedFilmRow(
   ctx: ImportContext,
   row: Record<string, string>,
 ): Promise<RowOutcome> {
-  const filmId = await resolveFilm(row['Name'], row['Year']);
+  const filmId = await resolveFilm(ctx, row['Name'], row['Year']);
   const result = await execute(
     `INSERT IGNORE INTO title_likes (user_id, film_id) VALUES (?, ?)`,
     [ctx.userId, filmId],
@@ -369,7 +375,7 @@ async function importReviewRow(ctx: ImportContext, row: Record<string, string>):
   const body = row['Review']?.trim();
   if (!body) return;
 
-  const filmId = await resolveFilm(row['Name'], row['Year']).catch(() => null);
+  const filmId = await resolveFilm(ctx, row['Name'], row['Year']).catch(() => null);
   if (filmId === null) return;
 
   const [rating] = await query<{ id: number }>(
@@ -389,21 +395,43 @@ async function importReviewRow(ctx: ImportContext, row: Record<string, string>):
 // ─── TMDB resolution ──────────────────────────────────────────────────────────
 
 /**
- * Resolves a Letterboxd (name, year) pair to a local films.id, caching the film
- * from TMDB on first sight. Throws when the film cannot be found on TMDB.
+ * Resolves a Letterboxd (name, year) pair to a local films.id, memoised per
+ * import job so every CSV maps a given film to the same row (the memo is what
+ * guarantees diary.csv and ratings.csv agree on an id and therefore dedupe).
+ *
+ * Fast-path: the local (title, release year) lookup is trusted only when it
+ * matches exactly one cached film. The films table also holds TMDB search
+ * results and remakes that share a title and year, and an ambiguous `LIMIT 1`
+ * is precisely what made the two CSVs disagree before. Anything ambiguous (>1
+ * match) or absent (0) falls through to an authoritative lookup via the unique
+ * tmdb_id. Throws when the film cannot be found on TMDB.
  */
-async function resolveFilm(name: string, year: string): Promise<number> {
-  // 1. Local cache hit by exact title + release year.
-  const [local] = await query<{ id: number }>(
-    `SELECT id FROM films WHERE title = ? AND YEAR(release_date) = ? LIMIT 1`,
+async function resolveFilm(ctx: ImportContext, name: string, year: string): Promise<number> {
+  const key = `${name} ${year}`;
+  const memoised = ctx.filmCache.get(key);
+  if (memoised !== undefined) return memoised;
+
+  // Fast-path: fetch up to two candidates so a unique cached match can be told
+  // from an ambiguous set; only an unambiguous single match is safe to trust
+  // without TMDB (the films table also holds search results and remakes that
+  // share a title and release year).
+  const candidates = await query<{ id: number }>(
+    `SELECT id FROM films WHERE title = ? AND YEAR(release_date) = ? LIMIT 2`,
     [name, year],
   );
-  if (local) return local.id;
+  const [first] = candidates;
+  if (candidates.length === 1 && first) {
+    ctx.filmCache.set(key, first.id);
+    return first.id;
+  }
 
-  // 2/3. TMDB search constrained by year, then unconstrained as a fallback.
+  // 0 or >1 matches → resolve through TMDB's unique id (cacheFilm inserts on
+  // first sight), which guarantees the same film always maps to the same row.
   const tmdbId = await searchTmdbFilmId(name, year);
   if (tmdbId === null) throw new Error('Not found on TMDB');
-  return cacheFilm(tmdbId);
+  const filmId = await cacheFilm(tmdbId);
+  ctx.filmCache.set(key, filmId);
+  return filmId;
 }
 
 /** Searches TMDB for a film id, preferring a year-constrained match. */
