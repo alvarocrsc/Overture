@@ -259,8 +259,12 @@ export default function ProfileView({
           watchlist={profile.watchlist_count}
           reviews={profile.reviews_count}
           lists={profile.lists_count}
-          onPressFilms={() => router.push('/(tabs)/stats')}
-          onPressSeries={() => router.push('/(tabs)/stats')}
+          onPressFilms={() =>
+            router.push(viewingSelf ? '/film' : '/(tabs)/stats')
+          }
+          onPressSeries={() =>
+            router.push(viewingSelf ? '/series' : '/(tabs)/stats')
+          }
           onPressDiary={() => router.push('/(tabs)/stats')}
           onPressWatchlist={() => router.push('/(tabs)/stats')}
           onPressReviews={() => router.push('/(tabs)/stats')}

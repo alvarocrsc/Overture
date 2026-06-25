@@ -58,6 +58,22 @@ interface MeResponseData {
 }
 
 /**
+ * Clears cookies left by any previously signed-in account — chiefly the
+ * Letterboxd WebView session the import flow creates — from both the native and
+ * WKWebView cookie stores.
+ *
+ * Call this *before* a login request (or on logout), never *after* a successful
+ * login: the login response sets the httpOnly refresh-token cookie in the native
+ * store, so clearing afterwards wipes it and breaks silent token refresh — the
+ * user gets bounced to the login screen the moment the short-lived access token
+ * expires.
+ */
+async function clearWebSessionCookies(): Promise<void> {
+  await CookieManager.clearAll().catch((): void => {});
+  await CookieManager.clearAll(true).catch((): void => {});
+}
+
+/**
  * Provides authentication state and actions to the entire app.
  * On mount it rehydrates the session from SecureStore; exposes login,
  * register, and logout helpers that update state and navigate accordingly.
@@ -95,10 +111,6 @@ export default function AuthProvider({
    */
   const applyCredentials = useCallback(
     async (accessToken: string, userData: User): Promise<void> => {
-      // Drop any Letterboxd WebView session left by a previous account so a
-      // newly authenticated user is asked for their own Letterboxd credentials
-      // on import instead of silently reusing the prior session.
-      await CookieManager.clearAll().catch((): void => {});
       await setToken(accessToken);
       setUser(userData);
     },
@@ -112,6 +124,10 @@ export default function AuthProvider({
    */
   const login = useCallback(
     async (email: string, password: string): Promise<void> => {
+      // Clear any prior account's web session (incl. the Letterboxd import
+      // WebView) before logging in, so the refresh-token cookie this request
+      // sets isn't wiped afterwards. See clearWebSessionCookies.
+      await clearWebSessionCookies();
       const res = await api.post<LoginResponseData>('/auth/login', {
         email,
         password,
@@ -133,6 +149,9 @@ export default function AuthProvider({
       email: string,
       password: string,
     ): Promise<void> => {
+      // Clear cookies before authenticating so the refresh-token cookie the
+      // login below sets survives. See clearWebSessionCookies.
+      await clearWebSessionCookies();
       await api.post('/auth/register', { username, email, password });
       const res = await api.post<LoginResponseData>('/auth/login', {
         email,
@@ -153,8 +172,9 @@ export default function AuthProvider({
     });
     await clearToken();
     // End the Letterboxd WebView session too, so the next account to sign in
-    // can't reuse this user's import login.
-    await CookieManager.clearAll().catch((): void => {});
+    // can't reuse this user's import login. The server already cleared the
+    // refresh-token cookie via the /auth/logout response.
+    await clearWebSessionCookies();
     setUser(null);
     router.replace('/login');
   }, []);

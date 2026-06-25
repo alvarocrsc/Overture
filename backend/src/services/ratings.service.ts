@@ -29,6 +29,13 @@ export interface RatingListRow {
   review_body: string | null;
   contains_spoilers: boolean | null;
   liked_title: boolean | null;
+  /**
+   * Whether the user currently likes this title, derived from `title_likes`
+   * (the live like state) rather than `liked_title` (a per-review snapshot).
+   * A user can like a title without ever writing a review, so these differ.
+   * Returned as 0/1 by MySQL; coerce to boolean at the call site.
+   */
+  is_liked: boolean;
 }
 
 /** Result returned after creating a rating. */
@@ -433,11 +440,16 @@ export async function getRatingsByUser(
        rev.id     AS review_id,
        rev.body   AS review_body,
        rev.contains_spoilers,
-       rev.liked_title
+       rev.liked_title,
+       (tl.id IS NOT NULL) AS is_liked
      FROM ratings r
      LEFT JOIN films   f   ON r.film_id   = f.id
      LEFT JOIN series  s   ON r.series_id = s.id
      LEFT JOIN reviews rev ON rev.rating_id = r.id
+     LEFT JOIN title_likes tl
+       ON tl.user_id = r.user_id
+      AND ((r.film_id   IS NOT NULL AND tl.film_id   = r.film_id)
+        OR (r.series_id IS NOT NULL AND tl.series_id = r.series_id))
      LEFT JOIN user_title_display_prefs pf
        ON pf.user_id = r.user_id AND pf.film_id   = f.id
      LEFT JOIN user_title_display_prefs ps
