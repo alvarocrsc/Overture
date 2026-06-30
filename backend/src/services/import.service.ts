@@ -290,9 +290,10 @@ async function runCountedSource(
 /**
  * Imports a diary entry (diary.csv).
  * Columns: Date, Name, Year, Letterboxd URI, Rating, Rewatch, Tags, Watched Date.
- * "Watched Date" is the real watch date; "Date" is the diary log date. The
- * (user_id, film_id) unique key collapses re-watches of the same film into a
- * single rating row (is_rewatch is OR-ed on).
+ * "Watched Date" is the real watch date; "Date" is the diary log date. Each
+ * diary entry becomes its own rating row, so rewatches are preserved as separate
+ * logs; re-importing the same entry is de-duplicated on the unique letterboxd_uri
+ * that the ON DUPLICATE KEY UPDATE below keys on.
  */
 async function importDiaryRow(ctx: ImportContext, row: Record<string, string>): Promise<RowOutcome> {
   const ratingRaw = row['Rating'];
@@ -324,8 +325,11 @@ async function importDiaryRow(ctx: ImportContext, row: Record<string, string>): 
 /**
  * Imports a standalone rating (ratings.csv).
  * Columns: Date, Name, Year, Letterboxd URI, Rating.
- * Supplementary to diary.csv — only fills the star when no diary entry exists;
- * never overwrites a diary-sourced watched_on or letterboxd_uri.
+ * Supplementary to diary.csv — only adds a log for films the user has no log
+ * for at all. Now that multiple ratings per film are allowed, the old (user,
+ * film) unique key no longer blocks a duplicate, so we check for an existing
+ * log explicitly; otherwise every rated film already in the diary would be
+ * logged twice.
  */
 async function importRatingRow(
   ctx: ImportContext,
@@ -334,6 +338,13 @@ async function importRatingRow(
   const ratingRaw = row['Rating'];
   if (!ratingRaw) return 'skipped'; // value is NOT NULL — nothing to store without a star.
   const filmId = await resolveFilm(ctx, row['Name'], row['Year']);
+
+  const [existing] = await query<{ id: number }>(
+    `SELECT id FROM ratings WHERE user_id = ? AND film_id = ? LIMIT 1`,
+    [ctx.userId, filmId],
+  );
+  if (existing) return 'skipped';
+
   const value = parseFloat(ratingRaw);
   const watchedOn = parseLbDate(row['Date']);
   const lbUri = row['Letterboxd URI'] || null;
@@ -341,11 +352,9 @@ async function importRatingRow(
   const result = await execute(
     `INSERT INTO ratings
        (user_id, film_id, import_job_id, value, watched_on, is_rewatch, letterboxd_uri)
-     VALUES (?, ?, ?, ?, ?, 0, ?)
-     ON DUPLICATE KEY UPDATE value = COALESCE(VALUES(value), value)`,
+     VALUES (?, ?, ?, ?, ?, 0, ?)`,
     [ctx.userId, filmId, ctx.jobId, value, watchedOn, lbUri],
   );
-  // affectedRows: 1 = a film this user hadn't rated yet; 2/0 = already rated.
   return result.affectedRows === 1 ? 'imported' : 'skipped';
 }
 
@@ -382,10 +391,13 @@ async function importLikedFilmRow(
 }
 
 /**
- * Attaches a review (reviews.csv) to an existing rating, matched by
- * (user_id, film_id) — the review's own Letterboxd URI differs from both the
- * diary entry URI and the film URI, so it can't be used as the match key.
- * reviews.csv has no spoiler column, so contains_spoilers is always false.
+ * Attaches a review (reviews.csv) to one of the user's logs of the film. A film
+ * may now have several logs (rewatches), so the review is matched to the log
+ * whose watched date equals the review's, preferring a log that has no review
+ * yet, and falling back to the most recent log. The review's own Letterboxd URI
+ * differs from both the diary entry URI and the film URI, so it can't be used as
+ * the match key. reviews.csv has no spoiler column, so contains_spoilers is
+ * always false.
  */
 async function importReviewRow(ctx: ImportContext, row: Record<string, string>): Promise<void> {
   const body = row['Review']?.trim();
@@ -394,9 +406,17 @@ async function importReviewRow(ctx: ImportContext, row: Record<string, string>):
   const filmId = await resolveFilm(ctx, row['Name'], row['Year']).catch(() => null);
   if (filmId === null) return;
 
+  const watchedOn = parseLbDate(row['Watched Date']) ?? parseLbDate(row['Date']);
   const [rating] = await query<{ id: number }>(
-    `SELECT id FROM ratings WHERE user_id = ? AND film_id = ? LIMIT 1`,
-    [ctx.userId, filmId],
+    `SELECT r.id
+       FROM ratings r
+       LEFT JOIN reviews rv ON rv.rating_id = r.id
+      WHERE r.user_id = ? AND r.film_id = ?
+      ORDER BY (r.watched_on <=> ?) DESC,
+               (rv.id IS NULL) DESC,
+               r.watched_on DESC, r.created_at DESC, r.id DESC
+      LIMIT 1`,
+    [ctx.userId, filmId, watchedOn],
   );
   if (!rating) return;
 

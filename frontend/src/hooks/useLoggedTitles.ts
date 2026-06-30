@@ -55,23 +55,25 @@ async function fetchLoggedTitlesPage(
   page: number,
 ): Promise<PaginatedResponse> {
   const res = await api.get<PaginatedResponse>(`/ratings/user/${userId}`, {
-    params: { type: mediaType, page, limit: PAGE_SIZE },
+    // distinct=1 collapses rewatches to one poster per title; sort defaults to
+    // newest release first.
+    params: { type: mediaType, page, limit: PAGE_SIZE, distinct: 1, sort: 'release_desc' },
   });
   return res.data;
 }
 
 /**
- * Infinitely-paginated list of every film or series a user has logged, newest
- * first, with the star rating plus like / review state for each.
+ * Infinitely-paginated library of every film or series a user has logged,
+ * ordered by release date (newest first), with the star rating plus like /
+ * review state for each.
  *
  * Keyed under `['ratings', ...]` so it is invalidated by the same cache busts
  * the film/series action hooks and the importer already fire — logging,
  * liking, reviewing or importing a title refreshes the library automatically.
  *
- * The backend enforces one rating per (user, title) and one review per rating,
- * so each title appears exactly once with at most one `reviewId`. The query is
- * ordered newest-first, so if rewatch support later allows several
- * ratings/reviews per title, the most recent naturally surfaces.
+ * A title can have several logs (rewatches), so the backend collapses them via
+ * `distinct=1`: each title appears once, showing the most recent log's rating
+ * and a `reviewId` that points at the user's most recent review of it.
  *
  * @param userId - Whose library to load; the query is disabled while undefined.
  * @param mediaType - 'film' or 'series'.

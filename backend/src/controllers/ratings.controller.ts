@@ -62,6 +62,19 @@ export async function getRatingsByUser(req: Request, res: Response): Promise<voi
   const limit = Math.min(Number(req.query['limit'] ?? 20) || 20, 100);
   const page = Math.max(Number(req.query['page'] ?? 1) || 1, 1);
 
-  const result = await ratingsService.getRatingsByUser(userId, { type, page, limit });
+  // Library view passes distinct=1 to collapse rewatches into one row per title,
+  // plus an optional whitelisted sort key (defaults to newest release first).
+  const rawDistinct = req.query['distinct'];
+  const distinct = rawDistinct === '1' || rawDistinct === 'true';
+  const rawSort = req.query['sort'];
+  const sort = typeof rawSort === 'string' ? rawSort : undefined;
+
+  const result = await ratingsService.getRatingsByUser(userId, {
+    type,
+    page,
+    limit,
+    distinct,
+    sort,
+  });
   res.status(200).json(result);
 }

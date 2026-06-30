@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -240,6 +241,27 @@ export default function LogDetailsScreen(): React.JSX.Element {
               color={Colors.textMuted}
             />
           </View>
+        </Pressable>
+
+        <View style={styles.separator} />
+
+        {/* Rewatch toggle row */}
+        <Pressable
+          onPress={() => log.setIsRewatch(!log.isRewatch)}
+          style={({ pressed }) => [styles.dateRow, pressed && styles.pressed]}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: log.isRewatch }}
+          accessibilityLabel="Mark as rewatch"
+        >
+          <Ionicons name="repeat" size={16} color={Colors.white} />
+          <Text style={styles.dateLabel}>Rewatch</Text>
+          <Switch
+            value={log.isRewatch}
+            onValueChange={log.setIsRewatch}
+            trackColor={{ false: '#2e2e2e', true: Colors.accentBlue }}
+            thumbColor={Colors.white}
+            ios_backgroundColor="#2e2e2e"
+          />
         </Pressable>
 
         <View style={styles.separator} />

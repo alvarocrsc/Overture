@@ -5,7 +5,6 @@ import * as seriesService from './series.service';
 import type { Rating } from '../models/rating.model';
 import type { Review } from '../models/review.model';
 import type { CreateRatingInput, UpdateRatingInput } from '../validators/rating.validators';
-import type { ResultSetHeader } from 'mysql2';
 
 /** Shape of an internal DB id lookup result. */
 interface IdRow {
@@ -115,40 +114,30 @@ export async function createRating(
 
   if (data.film_id !== undefined) {
     internalFilmId = await resolveFilmId(data.film_id);
-
-    const [existing] = await query<IdRow>(
-      `SELECT id FROM ratings WHERE user_id = ? AND film_id = ?`,
-      [userId, internalFilmId],
-    );
-    if (existing) {
-      throw new AppError('You have already logged this title', 409);
-    }
   } else {
     // series_id is defined — checked above
     internalSeriesId = await resolveSeriesId(data.series_id!);
-
-    const [existing] = await query<IdRow>(
-      `SELECT id FROM ratings WHERE user_id = ? AND series_id = ?`,
-      [userId, internalSeriesId],
-    );
-    if (existing) {
-      throw new AppError('You have already logged this title', 409);
-    }
   }
 
-  let ratingInsert: ResultSetHeader;
-  try {
-    ratingInsert = await execute(
-      `INSERT INTO ratings (user_id, film_id, series_id, value, is_rewatch, watched_on)
-       VALUES (?, ?, ?, ?, ?, COALESCE(?, CURDATE()))`,
-      [userId, internalFilmId, internalSeriesId, data.value, data.is_rewatch, data.watched_on ?? null],
-    );
-  } catch (err: unknown) {
-    if (isDuplicateKeyError(err)) {
-      throw new AppError('You have already logged this title', 409);
-    }
-    throw err;
-  }
+  // Multiple logs of the same title are allowed (rewatches each get their own
+  // diary entry). A log counts as a rewatch when the client flags it, or — so
+  // the user never has to toggle it manually — when the user has logged this
+  // title at least once before.
+  const [priorLog] = await query<IdRow>(
+    `SELECT id FROM ratings
+      WHERE user_id = ?
+        AND ((? IS NOT NULL AND film_id   = ?)
+          OR (? IS NOT NULL AND series_id = ?))
+      LIMIT 1`,
+    [userId, internalFilmId, internalFilmId, internalSeriesId, internalSeriesId],
+  );
+  const isRewatch = data.is_rewatch || priorLog !== undefined;
+
+  const ratingInsert = await execute(
+    `INSERT INTO ratings (user_id, film_id, series_id, value, is_rewatch, watched_on)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, CURDATE()))`,
+    [userId, internalFilmId, internalSeriesId, data.value, isRewatch, data.watched_on ?? null],
+  );
 
   const ratingId = ratingInsert.insertId;
   let reviewId: number | null = null;
@@ -199,7 +188,7 @@ export async function createRating(
     }
   }
 
-  return { rating_id: ratingId, review_id: reviewId, is_rewatch: data.is_rewatch };
+  return { rating_id: ratingId, review_id: reviewId, is_rewatch: isRewatch };
 }
 
 /**
@@ -391,6 +380,13 @@ export interface GetRatingsOptions {
   type?: 'film' | 'series';
   page: number;
   limit: number;
+  /**
+   * Library mode: collapse rewatches so each title appears once (latest log +
+   * latest review). Diary mode (default) returns every individual log.
+   */
+  distinct?: boolean;
+  /** Whitelisted sort key, applied in distinct mode only. See DISTINCT_SORTS. */
+  sort?: string;
 }
 
 /**
@@ -414,6 +410,18 @@ export async function getRatingsByUser(
   let typeFilter = '';
   if (options.type === 'film') typeFilter = 'AND r.film_id IS NOT NULL';
   if (options.type === 'series') typeFilter = 'AND r.series_id IS NOT NULL';
+
+  // Library mode collapses rewatches into one row per title, sorted by release
+  // date (default); diary mode below keeps every individual log, newest first.
+  if (options.distinct) {
+    return getDistinctTitlesPage(userId, {
+      clampedLimit,
+      offset,
+      typeFilter,
+      page: options.page,
+      sort: options.sort,
+    });
+  }
 
   const baseWhere = `WHERE r.user_id = ? ${typeFilter}`;
 
@@ -455,7 +463,7 @@ export async function getRatingsByUser(
      LEFT JOIN user_title_display_prefs ps
        ON ps.user_id = r.user_id AND ps.series_id = s.id
      ${baseWhere}
-     ORDER BY r.watched_on DESC, r.created_at DESC
+     ORDER BY r.watched_on DESC, r.created_at DESC, r.id DESC
      LIMIT ${clampedLimit} OFFSET ${offset}`,
     [userId],
   );
@@ -463,12 +471,111 @@ export async function getRatingsByUser(
   return { data: rows, total, page: options.page, limit: clampedLimit };
 }
 
-/** Narrows an unknown error to a mysql2 duplicate-key error (errno 1062). */
-function isDuplicateKeyError(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'errno' in err &&
-    (err as { errno: number }).errno === 1062
+/**
+ * Whitelisted ORDER BY clauses for the distinct/library view. Keyed so the
+ * client can only ever pick a pre-vetted ordering (no SQL injection surface).
+ * `release_date` / `sort_title` are aliases projected by getDistinctTitlesPage;
+ * `release_date IS NULL` keeps titles with an unknown release date at the
+ * bottom regardless of direction.
+ */
+const DISTINCT_SORTS: Record<string, string> = {
+  release_desc: 'release_date IS NULL ASC, release_date DESC, sort_title ASC, rep.id DESC',
+  release_asc: 'release_date IS NULL ASC, release_date ASC, sort_title ASC, rep.id DESC',
+  rated_desc: 'rep.value DESC, sort_title ASC, rep.id DESC',
+  rated_asc: 'rep.value ASC, sort_title ASC, rep.id DESC',
+  logged_desc: 'rep.watched_on DESC, rep.created_at DESC, rep.id DESC',
+  logged_asc: 'rep.watched_on ASC, rep.created_at ASC, rep.id ASC',
+};
+
+const DEFAULT_DISTINCT_SORT = 'release_desc';
+
+interface DistinctPageParams {
+  clampedLimit: number;
+  offset: number;
+  typeFilter: string;
+  page: number;
+  sort: string | undefined;
+}
+
+/**
+ * Library view: one row per distinct title the user has logged, collapsing
+ * rewatches. The representative row is the user's most recent log of that
+ * title; `review_id` points at their most recent review of it (which may belong
+ * to an older log than the representative). Sorted by the whitelisted `sort`
+ * key, defaulting to newest release first.
+ */
+async function getDistinctTitlesPage(
+  userId: number,
+  params: DistinctPageParams,
+): Promise<{ data: RatingListRow[]; total: number; page: number; limit: number }> {
+  const { clampedLimit, offset, typeFilter, page } = params;
+  const orderBy =
+    DISTINCT_SORTS[params.sort ?? ''] ?? DISTINCT_SORTS[DEFAULT_DISTINCT_SORT]!;
+
+  const [countRow] = await query<{ total: number }>(
+    `SELECT COUNT(*) AS total FROM (
+       SELECT 1
+         FROM ratings r
+        WHERE r.user_id = ? ${typeFilter}
+        GROUP BY r.film_id, r.series_id
+     ) t`,
+    [userId],
   );
+  // Non-null assertion safe: COUNT(*) always returns a row.
+  const total = countRow!.total;
+
+  const rows = await query<RatingListRow>(
+    `SELECT
+       rep.id,
+       rep.value,
+       rep.is_rewatch,
+       rep.watched_on,
+       rep.created_at,
+       f.tmdb_id  AS film_tmdb_id,
+       f.title    AS film_title,
+       COALESCE(pf.custom_poster_path, f.poster_path) AS film_poster,
+       s.tmdb_id  AS series_tmdb_id,
+       s.title    AS series_title,
+       COALESCE(ps.custom_poster_path, s.poster_path) AS series_poster,
+       (
+         SELECT rev.id FROM reviews rev
+           JOIN ratings r2 ON rev.rating_id = r2.id
+          WHERE r2.user_id = ?
+            AND ((rep.film_id   IS NOT NULL AND r2.film_id   = rep.film_id)
+              OR (rep.series_id IS NOT NULL AND r2.series_id = rep.series_id))
+          ORDER BY rev.created_at DESC, rev.id DESC
+          LIMIT 1
+       ) AS review_id,
+       NULL AS review_body,
+       NULL AS contains_spoilers,
+       NULL AS liked_title,
+       (tl.id IS NOT NULL) AS is_liked,
+       COALESCE(f.release_date, s.first_air_date) AS release_date,
+       COALESCE(f.title, s.title) AS sort_title
+     FROM (
+       SELECT r.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY r.film_id, r.series_id
+                ORDER BY r.watched_on DESC, r.created_at DESC, r.id DESC
+              ) AS rn
+         FROM ratings r
+        WHERE r.user_id = ? ${typeFilter}
+     ) rep
+     LEFT JOIN films  f ON rep.film_id   = f.id
+     LEFT JOIN series s ON rep.series_id = s.id
+     LEFT JOIN title_likes tl
+       ON tl.user_id = ?
+      AND ((rep.film_id   IS NOT NULL AND tl.film_id   = rep.film_id)
+        OR (rep.series_id IS NOT NULL AND tl.series_id = rep.series_id))
+     LEFT JOIN user_title_display_prefs pf
+       ON pf.user_id = ? AND pf.film_id   = f.id
+     LEFT JOIN user_title_display_prefs ps
+       ON ps.user_id = ? AND ps.series_id = s.id
+     WHERE rep.rn = 1
+     ORDER BY ${orderBy}
+     LIMIT ${clampedLimit} OFFSET ${offset}`,
+    [userId, userId, userId, userId, userId],
+  );
+
+  return { data: rows, total, page, limit: clampedLimit };
 }

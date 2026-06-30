@@ -149,8 +149,10 @@ export async function getUserProfile(
   ] = await Promise.all([
     query<CountRow>('SELECT COUNT(*) AS c FROM follows WHERE following_id = ?', [userId]),
     query<CountRow>('SELECT COUNT(*) AS c FROM follows WHERE follower_id = ?', [userId]),
-    query<CountRow>('SELECT COUNT(*) AS c FROM ratings WHERE user_id = ? AND film_id IS NOT NULL', [userId]),
-    query<CountRow>('SELECT COUNT(*) AS c FROM ratings WHERE user_id = ? AND series_id IS NOT NULL', [userId]),
+    // Distinct titles: a rewatch (another log of the same film/series) must not
+    // bump these card counts.
+    query<CountRow>('SELECT COUNT(DISTINCT film_id) AS c FROM ratings WHERE user_id = ? AND film_id IS NOT NULL', [userId]),
+    query<CountRow>('SELECT COUNT(DISTINCT series_id) AS c FROM ratings WHERE user_id = ? AND series_id IS NOT NULL', [userId]),
     query<CountRow>('SELECT COUNT(*) AS c FROM watchlist WHERE user_id = ?', [userId]),
     query<CountRow>('SELECT COUNT(*) AS c FROM reviews WHERE user_id = ?', [userId]),
     query<CountRow>('SELECT COUNT(*) AS c FROM lists WHERE user_id = ?', [userId]),
@@ -161,13 +163,13 @@ export async function getUserProfile(
       [userId],
     ),
     query<CountRow>(
-      `SELECT COUNT(*) AS c FROM ratings
+      `SELECT COUNT(DISTINCT film_id) AS c FROM ratings
        WHERE user_id = ? AND film_id IS NOT NULL
          AND watched_on IS NOT NULL AND YEAR(watched_on) = YEAR(CURDATE())`,
       [userId],
     ),
     query<CountRow>(
-      `SELECT COUNT(*) AS c FROM ratings
+      `SELECT COUNT(DISTINCT series_id) AS c FROM ratings
        WHERE user_id = ? AND series_id IS NOT NULL
          AND watched_on IS NOT NULL AND YEAR(watched_on) = YEAR(CURDATE())`,
       [userId],

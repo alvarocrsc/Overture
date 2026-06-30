@@ -839,16 +839,23 @@ export async function getFilmWatchedBy(
        (CASE WHEN rv.id IS NOT NULL THEN 1 ELSE 0 END) AS has_review,
        rv.id AS review_id,
        (CASE WHEN ? IS NOT NULL AND f.follower_id IS NOT NULL THEN 1 ELSE 0 END) AS is_friend
-     FROM ratings r
+     FROM (
+       SELECT r2.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY r2.user_id
+                ORDER BY r2.watched_on DESC, r2.created_at DESC, r2.id DESC
+              ) AS rn
+         FROM ratings r2
+        WHERE r2.film_id = ?
+     ) r
      JOIN users u ON u.id = r.user_id
      LEFT JOIN reviews rv ON rv.rating_id = r.id
      LEFT JOIN follows f ON f.follower_id = ? AND f.following_id = u.id
-     WHERE r.film_id = ?
+     WHERE r.rn = 1
        AND (? IS NULL OR u.id != ?)
-     GROUP BY u.id, u.username, u.avatar_url, r.value, r.is_rewatch, r.created_at, rv.id, f.follower_id
-     ORDER BY is_friend DESC, r.created_at DESC
+     ORDER BY is_friend DESC, r.created_at DESC, r.id DESC
      LIMIT ${SOCIAL_LIMIT}`,
-    [userId, userId, film.id, userId, userId],
+    [userId, film.id, userId, userId, userId],
   );
 
   return rows.map((r) => ({
