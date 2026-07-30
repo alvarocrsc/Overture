@@ -89,6 +89,7 @@ function RootLayoutNav() {
                     <Stack.Screen name="series/index" options={{ headerShown: false }} />
                     <Stack.Screen name="series/[tmdbId]" options={{ headerShown: false }} />
                     <Stack.Screen name="list/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="watchlist" options={{ headerShown: false }} />
                     <Stack.Screen name="user-lists/[userId]" options={{ headerShown: false }} />
                     <Stack.Screen name="lists/me" options={{ headerShown: false }} />
                     <Stack.Screen name="lists/folder/[folderId]" options={{ headerShown: false }} />

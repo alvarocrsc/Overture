@@ -7,19 +7,17 @@ interface TrailerResponse {
   data: {
     key: string;
     site: string;
-    type: string;
-    official: boolean;
+    name: string;
   } | null;
 }
 
 /**
- * Lazily fetches the official YouTube trailer key for a film or series.
+ * Lazily fetches the best available YouTube trailer key for a film or series.
  *
- * Films are served by `GET /films/:tmdbId/trailer`. There is currently no
- * series trailer endpoint, so series always resolve to `null`.
- *
- * TODO(series-trailer): wire up a real series trailer endpoint and fetch it
- * here once it ships on the backend.
+ * Films are served by `GET /films/:tmdbId/trailer` and series by
+ * `GET /series/:tmdbId/trailer`. Both endpoints run the backend's coverage
+ * fallback chain (TMDB official → any trailer → teaser → YouTube search) and
+ * return the resolved key, or null when none exists.
  *
  * @param mediaType - Whether the title is a film or a series.
  * @param tmdbId - The TMDB id, or undefined to skip the query.
@@ -35,11 +33,14 @@ export function useTitleTrailer(
   return useQuery({
     queryKey: ['trailer', mediaType, tmdbId],
     queryFn: async (): Promise<string | null> => {
-      if (mediaType !== 'film') return null;
-      const res = await api.get<TrailerResponse>(`/films/${tmdbId}/trailer`);
+      const path =
+        mediaType === 'film'
+          ? `/films/${tmdbId}/trailer`
+          : `/series/${tmdbId}/trailer`;
+      const res = await api.get<TrailerResponse>(path);
       return res.data.data?.key ?? null;
     },
-    enabled: enabled && tmdbId != null && mediaType === 'film',
+    enabled: enabled && tmdbId != null,
     staleTime: Infinity,
   });
 }

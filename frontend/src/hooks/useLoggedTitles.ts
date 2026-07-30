@@ -78,10 +78,17 @@ async function fetchLoggedTitlesPage(
  * @param userId - Whose library to load; the query is disabled while undefined.
  * @param mediaType - 'film' or 'series'.
  */
+/** Flattened library result: the loaded titles plus the total available. */
+export interface LoggedTitlesData {
+  items: LoggedTitle[];
+  /** Total distinct titles the user has logged, used to size the skeleton tail. */
+  total: number;
+}
+
 export function useLoggedTitles(
   userId: number | undefined,
   mediaType: MediaType,
-): UseInfiniteQueryResult<LoggedTitle[]> {
+): UseInfiniteQueryResult<LoggedTitlesData> {
   return useInfiniteQuery({
     queryKey: ['ratings', 'logged-titles', userId, mediaType],
     queryFn: ({ pageParam }) =>
@@ -93,11 +100,12 @@ export function useLoggedTitles(
     },
     enabled: userId != null,
     staleTime: 60 * 1000,
-    select: (data) =>
-      data.pages.flatMap((p) =>
-        p.data
-          .map(normalise)
-          .filter((t): t is LoggedTitle => t !== null),
+    select: (data) => ({
+      items: data.pages.flatMap((p) =>
+        p.data.map(normalise).filter((t): t is LoggedTitle => t !== null),
       ),
+      // Every page carries the same total (distinct title count).
+      total: data.pages[0]?.total ?? 0,
+    }),
   });
 }

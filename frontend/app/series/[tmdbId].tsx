@@ -168,7 +168,7 @@ export default function SeriesDetailScreen(
           />
         ) : null}
 
-        {activeTab === 'trailer' ? <SeriesTrailerTab /> : null}
+        {activeTab === 'trailer' ? <SeriesTrailerTab tmdbId={tmdbId} /> : null}
 
         {activeTab === 'photos' ? <PhotosTab images={imagesQ.data} /> : null}
       </ScrollView>

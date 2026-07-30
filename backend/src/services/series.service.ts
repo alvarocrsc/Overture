@@ -1,5 +1,6 @@
 import { query, queryMany, execute } from '../config/db';
 import * as tmdbService from './tmdb.service';
+import { resolveTrailer, releaseYear, type TrailerResult } from './trailer.service';
 import { AppError } from '../utils/app-error';
 import type { Series } from '../models/series.model';
 import type { TmdbSeries, TmdbImage } from '../types/tmdb.types';
@@ -356,6 +357,28 @@ export async function getSeriesById(tmdbId: number): Promise<SeriesWithGenres> {
     cached_at: new Date(),
     genres: detail.genres,
   };
+}
+
+/**
+ * Returns the best available trailer for a series, or null when none exists.
+ *
+ * Mirrors the film trailer path: it delegates to the shared resolver, which
+ * runs the full coverage fallback chain (TMDB official → any trailer → teaser
+ * → YouTube search) and caches the outcome on the series row. The series is
+ * cached locally first so the resolver has a row to read from and write back to.
+ *
+ * @param tmdbId - The TMDB series ID.
+ * @returns A TrailerResult or null.
+ */
+export async function getSeriesTrailer(tmdbId: number): Promise<TrailerResult | null> {
+  const series = await getSeriesById(tmdbId);
+  return resolveTrailer(
+    'series',
+    series.id,
+    tmdbId,
+    series.title,
+    releaseYear(series.first_air_date),
+  );
 }
 
 /**

@@ -10,12 +10,22 @@ export interface WatchlistRow {
   film_tmdb_id: number | null;
   film_title: string | null;
   film_poster: string | null;
+  film_backdrop: string | null;
+  film_overview: string | null;
   film_release_date: string | null;
+  film_release_year: number | null;
+  film_director: string | null;
+  film_runtime_min: number | null;
   film_rating: number | null;
   series_tmdb_id: number | null;
   series_title: string | null;
   series_poster: string | null;
+  series_backdrop: string | null;
+  series_overview: string | null;
   series_first_air_date: string | null;
+  series_first_air_year: number | null;
+  series_creator: string | null;
+  series_number_of_seasons: number | null;
   series_rating: number | null;
 }
 
@@ -71,12 +81,26 @@ export async function getWatchlist(
        f.tmdb_id       AS film_tmdb_id,
        f.title         AS film_title,
        COALESCE(pf.custom_poster_path, f.poster_path) AS film_poster,
+       f.backdrop_path AS film_backdrop,
+       f.overview      AS film_overview,
        f.release_date  AS film_release_date,
+       YEAR(f.release_date) AS film_release_year,
+       (SELECT fc.person_name FROM film_credits fc
+         WHERE fc.film_id = f.id AND fc.role = 'director'
+         ORDER BY fc.id ASC LIMIT 1) AS film_director,
+       f.runtime_min   AS film_runtime_min,
        f.tmdb_rating   AS film_rating,
        s.tmdb_id       AS series_tmdb_id,
        s.title         AS series_title,
        COALESCE(ps.custom_poster_path, s.poster_path) AS series_poster,
+       s.backdrop_path AS series_backdrop,
+       s.overview      AS series_overview,
        s.first_air_date AS series_first_air_date,
+       YEAR(s.first_air_date) AS series_first_air_year,
+       (SELECT sc.person_name FROM series_credits sc
+         WHERE sc.series_id = s.id AND sc.role = 'director'
+         ORDER BY sc.id ASC LIMIT 1) AS series_creator,
+       s.seasons_count AS series_number_of_seasons,
        s.tmdb_rating   AS series_rating
      FROM watchlist w
      LEFT JOIN films  f ON w.film_id   = f.id

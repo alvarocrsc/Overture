@@ -1,9 +1,10 @@
 import { query, queryMany, execute } from '../config/db';
 import * as tmdbService from './tmdb.service';
 import { tmdbFetch } from '../config/tmdb';
+import { resolveTrailer, releaseYear, type TrailerResult } from './trailer.service';
 import { AppError } from '../utils/app-error';
 import type { Film } from '../models/film.model';
-import type { TmdbMovie, TmdbImage, TmdbVideo, TmdbCreditsResult } from '../types/tmdb.types';
+import type { TmdbMovie, TmdbImage, TmdbCreditsResult } from '../types/tmdb.types';
 
 /** A film row projected for search/discovery responses. */
 export interface FilmSearchResult {
@@ -536,19 +537,19 @@ export async function getFilmCredits(tmdbId: number): Promise<FilmCreditsRespons
 }
 
 /**
- * Returns the official YouTube trailer for a film, or null if none exists.
- * Filters TMDB's video list to the first entry with site === 'YouTube',
- * type === 'Trailer', and official === true.
+ * Returns the best available trailer for a film, or null when none exists.
+ *
+ * Delegates to the shared trailer resolver, which runs the full coverage
+ * fallback chain (TMDB official → any trailer → teaser → YouTube search) and
+ * caches the outcome on the film row. The film is cached locally first so the
+ * resolver has a row to read from and write back to.
+ *
  * @param tmdbId - The TMDB movie ID.
- * @returns A TmdbVideo or null.
+ * @returns A TrailerResult or null.
  */
-export async function getFilmTrailer(tmdbId: number): Promise<TmdbVideo | null> {
-  const videos = await tmdbService.getFilmVideos(tmdbId);
-  return (
-    videos.find(
-      (v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official,
-    ) ?? null
-  );
+export async function getFilmTrailer(tmdbId: number): Promise<TrailerResult | null> {
+  const film = await getFilmById(tmdbId);
+  return resolveTrailer('film', film.id, tmdbId, film.title, releaseYear(film.release_date));
 }
 
 // ─── Detail enrichment ───────────────────────────────────────────────────────

@@ -133,6 +133,13 @@ export async function getSeriesCredits(req: Request, res: Response): Promise<voi
   res.status(200).json({ data });
 }
 
+/** GET /api/v1/series/:tmdbId/trailer */
+export async function getSeriesTrailer(req: Request, res: Response): Promise<void> {
+  const tmdbId = parseTmdbId(req);
+  const data = await seriesService.getSeriesTrailer(tmdbId);
+  res.status(200).json({ data });
+}
+
 /** POST /api/v1/series/:tmdbId/like */
 export async function likeSeries(req: Request, res: Response): Promise<void> {
   const tmdbId = parseTmdbId(req);

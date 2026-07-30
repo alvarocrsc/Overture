@@ -266,7 +266,9 @@ export default function ProfileView({
             router.push(viewingSelf ? '/series' : '/(tabs)/stats')
           }
           onPressDiary={() => router.push('/(tabs)/stats')}
-          onPressWatchlist={() => router.push('/(tabs)/stats')}
+          onPressWatchlist={() =>
+            router.push(viewingSelf ? '/watchlist' : '/(tabs)/stats')
+          }
           onPressReviews={() => router.push('/(tabs)/stats')}
           onPressLists={() => {
             if (viewingSelf) {

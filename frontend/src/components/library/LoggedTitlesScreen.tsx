@@ -1,11 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -22,6 +16,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useLoggedTitles } from '@/src/hooks/useLoggedTitles';
 import { ListFilters } from '@/src/components/lists/ListFilters';
 import { LoggedPostersGrid } from '@/src/components/library/LoggedPostersGrid';
+import { LoggedPostersSkeleton } from '@/src/components/library/LoggedPostersSkeleton';
 import type { LoggedTitle } from '@/src/types/library.types';
 import type { ListViewMode, MediaType } from '@/src/types/lists.types';
 
@@ -50,7 +45,8 @@ export function LoggedTitlesScreen({
   const copy = COPY[mediaType];
 
   const query = useLoggedTitles(user?.id, mediaType);
-  const items = query.data ?? [];
+  const items = query.data?.items ?? [];
+  const total = query.data?.total ?? 0;
 
   // View mode is stubbed at "posters"; the toggle is wired but inert until the
   // expanded view ships. The filter chips are likewise non-functional for now.
@@ -70,16 +66,15 @@ export function LoggedTitlesScreen({
     } as never);
   }, []);
 
-  const handleEndReached = useCallback((): void => {
-    if (query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage();
-    }
+  const handleLoadMore = useCallback((): void => {
+    void query.fetchNextPage();
   }, [query]);
 
   // Clear the floating tab bar, which sits at `insets.bottom + offset` and is
   // `TAB_BAR_HEIGHT` tall, plus a little breathing room beneath the last row.
+  // No paddingTop: getItemLayout measures row offsets from 0, so the first row
+  // must start at the content origin. Trailing paddingBottom is fine.
   const contentPadding = {
-    paddingTop: 4,
     paddingBottom: insets.bottom + TAB_BAR_BOTTOM_OFFSET + TAB_BAR_HEIGHT + 24,
   };
 
@@ -107,9 +102,8 @@ export function LoggedTitlesScreen({
       </View>
 
       {query.isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={Colors.white} />
-        </View>
+        // Skeleton grid (~4 rows) instead of a blocking spinner.
+        <LoggedPostersSkeleton count={12} />
       ) : query.isError ? (
         <View style={styles.center}>
           <Text style={styles.muted}>Could not load your {copy.title.toLowerCase()}.</Text>
@@ -121,9 +115,11 @@ export function LoggedTitlesScreen({
       ) : (
         <LoggedPostersGrid
           items={items}
-          onItemPress={handleItemPress}
-          onEndReached={handleEndReached}
+          total={total}
+          hasNextPage={query.hasNextPage}
           isFetchingNextPage={query.isFetchingNextPage}
+          onLoadMore={handleLoadMore}
+          onItemPress={handleItemPress}
           contentContainerStyle={contentPadding}
         />
       )}

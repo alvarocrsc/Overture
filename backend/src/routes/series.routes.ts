@@ -4,6 +4,7 @@ import {
   getNewSeriesReleases,
   searchSeries,
   getSeriesById,
+  getSeriesTrailer,
   getSeriesImages,
   getSeriesCredits,
   getSeriesDistribution,
@@ -28,6 +29,7 @@ router.get('/search', optionalAccessToken, searchSeries);
 
 // Sub-resource routes on /:tmdbId/<resource> must appear before the bare
 // /:tmdbId route to avoid the bare param swallowing the request.
+router.get('/:tmdbId/trailer', getSeriesTrailer);
 router.get('/:tmdbId/images', getSeriesImages);
 router.get('/:tmdbId/credits', getSeriesCredits);
 router.get('/:tmdbId/distribution', getSeriesDistribution);

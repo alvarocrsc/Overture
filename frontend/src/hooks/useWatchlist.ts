@@ -1,5 +1,10 @@
 import { useCallback, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import api from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -10,6 +15,90 @@ export interface WatchlistMembershipRow {
 }
 
 export const WATCHLIST_MEMBERSHIP_KEY = ['watchlist', 'membership'] as const;
+
+/**
+ * A full watchlist entry joined with its film/series data. Mirrors the backend
+ * `WatchlistRow` shape and carries everything the shared list components need
+ * to render the watchlist exactly like a list (poster, backdrop, overview,
+ * year and director/creator credit for the expanded view).
+ */
+export interface WatchlistItemRow {
+  id: number;
+  priority: number;
+  added_at: string;
+  film_tmdb_id: number | null;
+  film_title: string | null;
+  film_poster: string | null;
+  film_backdrop: string | null;
+  film_overview: string | null;
+  film_release_date: string | null;
+  film_release_year: number | null;
+  film_director: string | null;
+  film_runtime_min: number | null;
+  series_tmdb_id: number | null;
+  series_title: string | null;
+  series_poster: string | null;
+  series_backdrop: string | null;
+  series_overview: string | null;
+  series_first_air_date: string | null;
+  series_first_air_year: number | null;
+  series_creator: string | null;
+  series_number_of_seasons: number | null;
+}
+
+interface WatchlistPageResponse {
+  data: WatchlistItemRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/** Query key for the full watchlist listing (all entries). */
+export const WATCHLIST_ITEMS_KEY = ['watchlist', 'items'] as const;
+
+/** Backend clamps `limit` to 100, so page through until every entry is loaded. */
+const WATCHLIST_PAGE_SIZE = 100;
+
+/**
+ * Fetches every entry on the current user's watchlist by walking the paginated
+ * endpoint until it is exhausted. A watchlist is personal and typically fits in
+ * a single page, so this is usually one request — but it stays correct for the
+ * rare oversized watchlist, mirroring how a list loads all of its items at once.
+ */
+async function fetchAllWatchlistItems(): Promise<WatchlistItemRow[]> {
+  const all: WatchlistItemRow[] = [];
+  let page = 1;
+  let hasMore = true;
+  while (hasMore) {
+    const res = await api.get<WatchlistPageResponse>('/watchlist', {
+      params: { page, limit: WATCHLIST_PAGE_SIZE },
+    });
+    all.push(...res.data.data);
+    const loaded = res.data.page * res.data.limit;
+    hasMore = res.data.data.length > 0 && loaded < res.data.total;
+    page += 1;
+  }
+  return all;
+}
+
+/**
+ * Loads the current user's full watchlist (all entries, priority-ordered).
+ *
+ * Keyed under `['watchlist', 'items']` so it is invalidated by the same
+ * `['watchlist']` cache busts every save / unsave control already fires —
+ * bookmarking a title anywhere refreshes the watchlist screen automatically.
+ *
+ * Disabled when the user is not signed in.
+ */
+export function useWatchlistItems(): UseQueryResult<WatchlistItemRow[]> {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: WATCHLIST_ITEMS_KEY,
+    queryFn: fetchAllWatchlistItems,
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+}
 
 /**
  * Loads the lightweight watchlist membership table for the current user.
