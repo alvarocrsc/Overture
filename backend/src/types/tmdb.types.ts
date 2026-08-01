@@ -86,12 +86,44 @@ export interface TmdbSeries {
   popularity: number;
 }
 
+/** A season summary as embedded in TMDB's /tv/{id} detail response. */
+export interface TmdbSeasonSummary {
+  id: number;
+  season_number: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  air_date: string | null;
+  episode_count: number;
+}
+
+/** A single episode as returned by TMDB's /tv/{id}/season/{n} endpoint. */
+export interface TmdbEpisode {
+  id: number;
+  episode_number: number;
+  name: string;
+  overview: string;
+  still_path: string | null;
+  air_date: string | null;
+  runtime: number | null;
+  vote_average: number;
+}
+
+/** Full season detail returned by TMDB's /tv/{id}/season/{n} endpoint. */
+export interface TmdbSeasonDetail {
+  id: number;
+  season_number: number;
+  episodes: TmdbEpisode[];
+}
+
 /** Full series detail returned by TMDB's /tv/{id} endpoint. */
 export interface TmdbSeriesDetail extends TmdbSeries {
   genres: Array<{ id: number; name: string }>;
   last_air_date: string | null;
   number_of_seasons: number;
   number_of_episodes: number;
+  /** Season summaries, included free with the detail response. */
+  seasons?: TmdbSeasonSummary[];
   status: string;
   /** Show creators as reported by TMDB. May be empty for documentaries / reality TV. */
   created_by?: Array<{

@@ -15,6 +15,7 @@ import listsRoutes from './routes/lists.routes';
 import searchRoutes from './routes/search.routes';
 import statsRoutes from './routes/stats.routes';
 import importRoutes from './routes/import.routes';
+import episodeRatingsRoutes from './routes/episode-ratings.routes';
 
 import { errorHandler } from './middleware/errorHandler';
 
@@ -51,6 +52,9 @@ app.use('/api/v1/lists', listsRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/stats', statsRoutes);
 app.use('/api/v1/import', importRoutes);
+// Mounted last at the version root: its series-scoped paths are reached only
+// after series.routes.ts declines them.
+app.use('/api/v1', episodeRatingsRoutes);
 
 // ─── Global Error Handler ────────────────────────────────────────────────────
 // Must be registered last. Express 5 automatically forwards thrown errors from

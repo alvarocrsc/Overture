@@ -9,6 +9,7 @@ const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 export type PosterSize = 'w185' | 'w342' | 'w500' | 'original';
 export type BackdropSize = 'w300' | 'w780' | 'w1280' | 'original';
 export type LogoSize = 'w45' | 'w92' | 'w154' | 'w185' | 'w300' | 'w500' | 'original';
+export type StillSize = 'w92' | 'w185' | 'w300' | 'original';
 
 /**
  * Returns the full URL for a TMDB poster image.
@@ -28,6 +29,20 @@ export function posterUrl(path: string | null | undefined, size: PosterSize = 'o
  * @returns Full image URL or null if path is null/empty.
  */
 export function backdropUrl(path: string | null | undefined, size: BackdropSize = 'w780'): string | null {
+  if (!path) return null;
+  return `${IMAGE_BASE_URL}/${size}${path}`;
+}
+
+/**
+ * Returns the full URL for a TMDB episode still (the per-episode frame).
+ * @param path - The still_path value from the TMDB API.
+ * @param size - Desired image size. Defaults to 'w300'.
+ * @returns Full image URL or null if path is null/empty.
+ */
+export function stillUrl(
+  path: string | null | undefined,
+  size: StillSize = 'w300',
+): string | null {
   if (!path) return null;
   return `${IMAGE_BASE_URL}/${size}${path}`;
 }

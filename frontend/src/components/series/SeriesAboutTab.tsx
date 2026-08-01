@@ -14,11 +14,30 @@ import FilmLogRow from '@/src/components/film/FilmLogRow';
 import WatchedByCarousel from '@/src/components/film/WatchedByCarousel';
 import WantToWatchCarousel from '@/src/components/film/WantToWatchCarousel';
 import CastCrewGenresTabs from '@/src/components/film/CastCrewGenresTabs';
+import EpisodeRatingsSection from '@/src/components/series/EpisodeRatingsSection';
+import SeasonsCarousel from '@/src/components/series/SeasonsCarousel';
+import LogEpisodeDrawerContent from '@/src/components/series/log-episode-drawer-content';
+import BottomDrawer from '@/src/components/drawers/bottom-drawer';
+import { useCreateEpisodeRating } from '@/src/hooks/use-episode-ratings';
+import { backdropUrl } from '@/src/lib/tmdb';
+import type {
+  CreateEpisodeRatingPayload,
+  EpisodeListRow,
+  RatingSource,
+} from '@/src/types/episode-ratings.types';
 
 interface SeriesAboutTabProps {
   series: SeriesDetail;
   onPressLogMore: () => void;
   onPressUser: (userId: number) => void;
+}
+
+/** The episode the log drawer is currently open for. */
+interface EpisodeLogTarget {
+  seasonNumber: number;
+  episodeNumber: number;
+  name: string | null;
+  value: number | null;
 }
 
 const OVERVIEW_PREVIEW_LINES = 4;
@@ -38,6 +57,52 @@ export default function SeriesAboutTab({
 
   const [overviewExpanded, setOverviewExpanded] = useState<boolean>(false);
 
+  // `source` is lifted here rather than owned by the ratings section: the switch
+  // lives in that section visually, but the seasons carousel reads from it too,
+  // so both stay in sync off a single piece of state.
+  const [source, setSource] = useState<RatingSource>(user ? 'user' : 'app');
+  const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
+  const [episodeToLog, setEpisodeToLog] = useState<EpisodeLogTarget | null>(null);
+
+  const createEpisodeRating = useCreateEpisodeRating(tmdbId);
+
+  const handleEpisodeCellPress = (
+    seasonNumber: number,
+    episodeNumber: number,
+  ): void => {
+    setEpisodeToLog({ seasonNumber, episodeNumber, name: null, value: null });
+  };
+
+  const handleEpisodeLogPress = (
+    seasonNumber: number,
+    episode: EpisodeListRow,
+  ): void => {
+    setEpisodeToLog({
+      seasonNumber,
+      episodeNumber: episode.episode_number,
+      name: episode.name,
+      value: episode.value,
+    });
+  };
+
+  const handleEpisodePress = (
+    seasonNumber: number,
+    episode: EpisodeListRow,
+  ): void => {
+    // TODO(episode-detail): navigate to the episode detail screen once designed.
+    // Until it exists, tapping a row opens the same log flow as its button.
+    handleEpisodeLogPress(seasonNumber, episode);
+  };
+
+  const handleSaveEpisodeLog = (
+    payload: Omit<CreateEpisodeRatingPayload, 'tmdb_series_id'>,
+  ): void => {
+    createEpisodeRating.mutate(
+      { ...payload, tmdb_series_id: tmdbId },
+      { onSuccess: () => setEpisodeToLog(null) },
+    );
+  };
+
   return (
     <View style={styles.container}>
       {series.overview ? (
@@ -56,6 +121,22 @@ export default function SeriesAboutTab({
           </Text>
         </Pressable>
       ) : null}
+
+      <EpisodeRatingsSection
+        tmdbId={tmdbId}
+        source={source}
+        onSourceChange={setSource}
+        onEpisodeCellPress={handleEpisodeCellPress}
+      />
+
+      <SeasonsCarousel
+        tmdbId={tmdbId}
+        source={source}
+        expandedSeasonNumber={expandedSeason}
+        onSeasonExpandedChange={setExpandedSeason}
+        onEpisodeLogPress={handleEpisodeLogPress}
+        onEpisodePress={handleEpisodePress}
+      />
 
       <View style={styles.chartWrap}>
         {distributionQ.isLoading ? (
@@ -95,6 +176,26 @@ export default function SeriesAboutTab({
         crew={creditsQ.data?.crew ?? []}
         genres={series.genres}
       />
+
+      <BottomDrawer
+        visible={episodeToLog !== null}
+        onClose={() => setEpisodeToLog(null)}
+        backdropImageUri={backdropUrl(series.backdrop_path, 'w1280')}
+        logoUri={null}
+        titleFallback={series.title}
+        showDoneButton={false}
+      >
+        {episodeToLog ? (
+          <LogEpisodeDrawerContent
+            seasonNumber={episodeToLog.seasonNumber}
+            episodeNumber={episodeToLog.episodeNumber}
+            episodeName={episodeToLog.name}
+            initialValue={episodeToLog.value}
+            isSaving={createEpisodeRating.isPending}
+            onSave={handleSaveEpisodeLog}
+          />
+        ) : null}
+      </BottomDrawer>
     </View>
   );
 }

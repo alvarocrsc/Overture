@@ -1,6 +1,7 @@
 import { query, queryMany, execute } from '../config/db';
 import * as tmdbService from './tmdb.service';
 import { resolveTrailer, releaseYear, type TrailerResult } from './trailer.service';
+import { cacheSeasonsFromSeriesPayload } from './season-cache.service';
 import { AppError } from '../utils/app-error';
 import type { Series } from '../models/series.model';
 import type { TmdbSeries, TmdbImage } from '../types/tmdb.types';
@@ -279,6 +280,11 @@ export async function getSeriesById(tmdbId: number): Promise<SeriesWithGenres> {
     throw new AppError('Series cache write failed unexpectedly', 500);
   }
   const seriesId = inserted.id;
+
+  // Season summaries ride along in the detail response, so caching them here
+  // costs no extra TMDB call. Episodes stay lazy — one call per season, only
+  // when a season is actually opened.
+  await cacheSeasonsFromSeriesPayload(seriesId, detail.seasons);
 
   // Upsert genres, then (re-)link series_genres.
   for (const genre of detail.genres) {
