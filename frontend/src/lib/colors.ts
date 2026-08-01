@@ -99,6 +99,17 @@ export const TAB_BAR_HEIGHT = 55;
 /** Gap between the tab bar bottom and the device safe area. */
 export const TAB_BAR_BOTTOM_OFFSET = 0;
 
+// ─── Interaction ─────────────────────────────────────────────────────────────
+
+/**
+ * How long a press must be held to count as a long press, in milliseconds.
+ *
+ * Well below the 500ms platform default, which reads as a lag when the long
+ * press is the primary way to reach an action. Short enough to feel immediate,
+ * long enough that the first tap of a double tap does not trigger it.
+ */
+export const LONG_PRESS_DELAY = 250;
+
 // ─── Dimensions ───────────────────────────────────────────────────────────────
 
 export const Dimensions = {

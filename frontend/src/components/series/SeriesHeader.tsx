@@ -11,8 +11,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { SeriesDetail, SeriesImages } from '@/src/types/series.types';
-import { backdropUrl, logoUrl, posterUrl } from '@/src/lib/tmdb';
+import { backdropUrl, logoUrl } from '@/src/lib/tmdb';
 import { Colors, FontFamily, LetterSpacing, Radius } from '@/src/lib/colors';
+import ZoomablePoster from '@/src/components/shared/ZoomablePoster';
 import TabPills, { type FilmTabKey } from '@/src/components/film/TabPills';
 
 interface SeriesHeaderProps {
@@ -47,7 +48,6 @@ export default function SeriesHeader({
   const backdropPath = series.custom_backdrop_path ?? series.backdrop_path;
   const posterPath = series.custom_poster_path ?? series.poster_path;
   const backdropUri = backdropUrl(backdropPath, 'w1280');
-  const posterUri = posterUrl(posterPath, 'original');
 
   const logoPath = useMemo<string | null>(() => {
     const logos = images?.logos ?? [];
@@ -103,9 +103,8 @@ export default function SeriesHeader({
         </Pressable>
       </View>
 
-      {posterUri ? (
-        <Image source={{ uri: posterUri }} style={styles.poster} resizeMode="cover" />
-      ) : null}
+      {/* Poster (right side) — tap to enlarge over a blurred backdrop. */}
+      <ZoomablePoster posterPath={posterPath} style={styles.poster} />
 
       {logoUri ? (
         <Image source={{ uri: logoUri }} style={styles.logo} resizeMode="contain" />

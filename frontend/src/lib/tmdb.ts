@@ -33,6 +33,21 @@ export function backdropUrl(path: string | null | undefined, size: BackdropSize 
 }
 
 /**
+ * Returns the full URL for any TMDB image at its original size.
+ *
+ * The size buckets differ per image kind, but `original` is common to all of
+ * them, so this serves posters, backdrops and logos alike — useful where the
+ * kind of image is not known or does not matter, such as sharing.
+ *
+ * @param path - The file_path value from the TMDB API.
+ * @returns Full image URL or null if path is null/empty.
+ */
+export function originalImageUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  return `${IMAGE_BASE_URL}/original${path}`;
+}
+
+/**
  * Returns the full URL for a TMDB logo image.
  * @param path - The file_path value from the TMDB API.
  * @param size - Desired image size. Defaults to 'w185'.

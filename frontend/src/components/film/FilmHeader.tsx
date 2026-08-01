@@ -11,8 +11,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { FilmDetail, FilmImages } from '@/src/types/film.types';
-import { backdropUrl, logoUrl, posterUrl } from '@/src/lib/tmdb';
+import { backdropUrl, logoUrl } from '@/src/lib/tmdb';
 import { Colors, FontFamily, LetterSpacing, Radius } from '@/src/lib/colors';
+import ZoomablePoster from '@/src/components/shared/ZoomablePoster';
 import TabPills, { type FilmTabKey } from './TabPills';
 
 interface FilmHeaderProps {
@@ -45,7 +46,6 @@ export default function FilmHeader({
   const backdropPath = film.custom_backdrop_path ?? film.backdrop_path;
   const posterPath = film.custom_poster_path ?? film.poster_path;
   const backdropUri = backdropUrl(backdropPath, 'w1280');
-  const posterUri = posterUrl(posterPath, 'original');
 
   const logoPath = useMemo<string | null>(() => {
     const logos = images?.logos ?? [];
@@ -101,10 +101,8 @@ export default function FilmHeader({
         </Pressable>
       </View>
 
-      {/* Poster (right side) */}
-      {posterUri ? (
-        <Image source={{ uri: posterUri }} style={styles.poster} resizeMode="cover" />
-      ) : null}
+      {/* Poster (right side) — tap to enlarge over a blurred backdrop. */}
+      <ZoomablePoster posterPath={posterPath} style={styles.poster} />
 
       {/* Logo (centre, bottom area) */}
       {logoUri ? (

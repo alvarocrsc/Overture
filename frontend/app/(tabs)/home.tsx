@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -7,6 +7,7 @@ import { Colors, TAB_BAR_BOTTOM_OFFSET, TAB_BAR_HEIGHT } from '@/src/lib/colors'
 import { backdropUrl } from '@/src/lib/tmdb';
 import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
 
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import HomeHeader from '@/src/components/home/HomeHeader';
 import SectionHeader from '@/src/components/home/SectionHeader';
 import HorizontalCarousel from '@/src/components/home/HorizontalCarousel';
@@ -62,20 +63,20 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <PinnedHeaderScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 32 },
         ]}
+        header={
+          <HomeHeader
+            backdropUri={PLACEHOLDER_BACKDROP}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
+        }
       >
-        {/* ── Header ── */}
-        <HomeHeader
-          backdropUri={PLACEHOLDER_BACKDROP}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-
         {/* ── Friends' Activity ── */}
         <View style={styles.section}>
           <SectionHeader
@@ -145,7 +146,7 @@ export default function HomeScreen() {
             <DividesCarousel items={divides} />
           </View>
         )}
-      </ScrollView>
+      </PinnedHeaderScrollView>
     </View>
   );
 }

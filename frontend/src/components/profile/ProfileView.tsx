@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -14,6 +8,7 @@ import {
   TAB_BAR_HEIGHT,
 } from '@/src/lib/colors';
 
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import ProfileBanner from '@/src/components/profile/ProfileBanner';
 import FavoritesRow from '@/src/components/profile/FavoritesRow';
 import FavoritesEditorDrawer from '@/src/components/profile/FavoritesEditorDrawer';
@@ -187,7 +182,7 @@ export default function ProfileView({
 
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <PinnedHeaderScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scroll,
@@ -195,24 +190,25 @@ export default function ProfileView({
             paddingBottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET + 50,
           },
         ]}
+        header={
+          <ProfileBanner
+            profile={profile}
+            isOwnProfile={viewingSelf}
+            showBackButton={showBackButton}
+            isFollowing={followActions.isFollowing}
+            isFollowPending={followActions.isPending}
+            onPressFollow={() => void followActions.toggle()}
+            {...(viewingSelf
+              ? {
+                  onAvatarPress: () => void handleAvatarPress(),
+                  isAvatarUploading: isUploadingAvatar,
+                  onPressSettings: () => router.push('/settings'),
+                }
+              : {})}
+            {...(onPressBack ? { onPressBack } : {})}
+          />
+        }
       >
-        <ProfileBanner
-          profile={profile}
-          isOwnProfile={viewingSelf}
-          showBackButton={showBackButton}
-          isFollowing={followActions.isFollowing}
-          isFollowPending={followActions.isPending}
-          onPressFollow={() => void followActions.toggle()}
-          {...(viewingSelf
-            ? {
-                onAvatarPress: () => void handleAvatarPress(),
-                isAvatarUploading: isUploadingAvatar,
-                onPressSettings: () => router.push('/settings'),
-              }
-            : {})}
-          {...(onPressBack ? { onPressBack } : {})}
-        />
-
         <View style={styles.gap10} />
         {(hasFavorites || viewingSelf) && (
           <FavoritesRow
@@ -283,7 +279,7 @@ export default function ProfileView({
             }
           }}
         />
-      </ScrollView>
+      </PinnedHeaderScrollView>
 
       {viewingSelf ? (
         <FavoritesEditorDrawer

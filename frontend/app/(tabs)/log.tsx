@@ -3,7 +3,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput as TextInputType,
@@ -19,6 +18,7 @@ import {
   Spacing,
   TAB_BAR_HEIGHT,
 } from '@/src/lib/colors';
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import LogSearchBar from '@/src/components/log/LogSearchBar';
 import FilterPills, { type FilterType } from '@/src/components/log/FilterPills';
 import SearchResultItem from '@/src/components/log/SearchResultItem';
@@ -95,7 +95,7 @@ export default function LogScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
+        <PinnedHeaderScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -103,19 +103,19 @@ export default function LogScreen() {
             styles.scrollContent,
             { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 32 },
           ]}
+          header={
+            <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+              <Text style={styles.headerTitle}>Log</Text>
+              <Pressable hitSlop={12} style={styles.bellButton}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={22}
+                  color={Colors.white}
+                />
+              </Pressable>
+            </View>
+          }
         >
-          {/* ── Header ── */}
-          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-            <Text style={styles.headerTitle}>Log</Text>
-            <Pressable hitSlop={12} style={styles.bellButton}>
-              <Ionicons
-                name="notifications-outline"
-                size={22}
-                color={Colors.white}
-              />
-            </Pressable>
-          </View>
-
           {/* ── Search bar ── */}
           <View style={styles.searchWrapper}>
             <LogSearchBar
@@ -209,7 +209,7 @@ export default function LogScreen() {
               </View>
             </>
           )}
-        </ScrollView>
+        </PinnedHeaderScrollView>
       </KeyboardAvoidingView>
     </View>
   );

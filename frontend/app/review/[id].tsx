@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,6 +18,7 @@ import {
 } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import { BackdropPager } from '@/src/components/review/BackdropPager';
 import {
   CommentRow,
@@ -269,7 +269,7 @@ export default function ReviewScreen(
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={-25}
       >
-        <ScrollView
+        <PinnedHeaderScrollView
           style={styles.flex}
           contentContainerStyle={[
             styles.scrollContent,
@@ -278,61 +278,67 @@ export default function ReviewScreen(
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          header={
+            <>
+              {/* Header backdrop carousel */}
+              {backdropUrls.length > 0 ? (
+                <BackdropPager urls={backdropUrls} />
+              ) : defaultBackdropUrl != null ? (
+                <BackdropPager urls={[defaultBackdropUrl]} />
+              ) : (
+                // Tall enough to contain the absolutely-positioned top chrome:
+                // the header is an overlay now, and iOS does not deliver touches
+                // to subviews drawn outside their parent's bounds.
+                <View style={[styles.noBackdrop, { height: insets.top + 60 }]} />
+              )}
+
+              {/* Top chrome (back / more) over the backdrop */}
+              <View style={[styles.topChrome, { top: insets.top + 16 }]}>
+                <Pressable
+                  onPress={onPressBack ?? (() => router.back())}
+                  hitSlop={12}
+                  style={({ pressed }) => [
+                    styles.iconBtn,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go back"
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={22}
+                    color={Colors.white}
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    Alert.alert('More options', undefined, [
+                      {
+                        text: title ? `Go to ${title}` : 'Go to title',
+                        onPress: handlePressTitle,
+                      },
+                      { text: 'Share', onPress: () => undefined },
+                      { text: 'Cancel', style: 'cancel' },
+                    ]);
+                  }}
+                  hitSlop={12}
+                  style={({ pressed }) => [
+                    styles.iconBtn,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="More options"
+                >
+                  <Ionicons
+                    name="ellipsis-horizontal"
+                    size={22}
+                    color={Colors.white}
+                  />
+                </Pressable>
+              </View>
+            </>
+          }
         >
-          {/* Header backdrop carousel */}
-          {backdropUrls.length > 0 ? (
-            <BackdropPager urls={backdropUrls} />
-          ) : defaultBackdropUrl != null ? (
-            <BackdropPager urls={[defaultBackdropUrl]} />
-          ) : (
-            <View style={styles.noBackdrop} />
-          )}
-
-          {/* Top chrome (back / more) over the backdrop */}
-          <View style={[styles.topChrome, { top: insets.top + 16 }]}>
-            <Pressable
-              onPress={onPressBack ?? (() => router.back())}
-              hitSlop={12}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Ionicons
-                name="chevron-back"
-                size={22}
-                color={Colors.white}
-              />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                Alert.alert('More options', undefined, [
-                  {
-                    text: title ? `Go to ${title}` : 'Go to title',
-                    onPress: handlePressTitle,
-                  },
-                  { text: 'Share', onPress: () => undefined },
-                  { text: 'Cancel', style: 'cancel' },
-                ]);
-              }}
-              hitSlop={12}
-              style={({ pressed }) => [
-                styles.iconBtn,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="More options"
-            >
-              <Ionicons
-                name="ellipsis-horizontal"
-                size={22}
-                color={Colors.white}
-              />
-            </Pressable>
-          </View>
-
           {/* Title block */}
           <View style={styles.titleBlock}>
             {subtitle ? (
@@ -471,7 +477,7 @@ export default function ReviewScreen(
               </View>
             ))
           )}
-        </ScrollView>
+        </PinnedHeaderScrollView>
 
         {/* Sticky comment input */}
         <View

@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +7,7 @@ import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 import { useFilmDetail, useFilmImages } from '@/src/hooks/useFilmDetail';
 import { useFilmActions } from '@/src/hooks/useFilmActions';
 import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import FilmHeader from '@/src/components/film/FilmHeader';
 import FilmAboutTab from '@/src/components/film/FilmAboutTab';
 import FilmActionDrawer from '@/src/components/film/FilmActionDrawer';
@@ -131,24 +126,25 @@ export default function FilmDetailScreen(
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView
+      <PinnedHeaderScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        header={
+          <FilmHeader
+            film={film}
+            images={imagesQ.data}
+            topInset={insets.top}
+            activeTab={activeTab}
+            isInWatchlist={watchlist.inWatchlist}
+            onPressBack={onPressBack}
+            onChangeTab={setActiveTab}
+            onPressLog={handleOpenLogFlow}
+            onPressWatchlist={handleWatchlist}
+            onPressMore={() => setDrawerVisible(true)}
+          />
+        }
       >
-        <FilmHeader
-          film={film}
-          images={imagesQ.data}
-          topInset={insets.top}
-          activeTab={activeTab}
-          isInWatchlist={watchlist.inWatchlist}
-          onPressBack={onPressBack}
-          onChangeTab={setActiveTab}
-          onPressLog={handleOpenLogFlow}
-          onPressWatchlist={handleWatchlist}
-          onPressMore={() => setDrawerVisible(true)}
-        />
-
         {activeTab === 'about' ? (
           <FilmAboutTab
             film={film}
@@ -162,7 +158,7 @@ export default function FilmDetailScreen(
         {activeTab === 'trailer' ? <TrailerTab tmdbId={tmdbId} /> : null}
 
         {activeTab === 'photos' ? <PhotosTab images={imagesQ.data} /> : null}
-      </ScrollView>
+      </PinnedHeaderScrollView>
 
       <FilmActionDrawer
         visible={drawerVisible}

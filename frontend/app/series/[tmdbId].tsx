@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -17,6 +11,7 @@ import {
 } from '@/src/hooks/useSeriesDetail';
 import { useSeriesActions } from '@/src/hooks/useSeriesActions';
 import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import SeriesHeader from '@/src/components/series/SeriesHeader';
 import SeriesAboutTab from '@/src/components/series/SeriesAboutTab';
 import SeriesActionDrawer from '@/src/components/series/SeriesActionDrawer';
@@ -139,25 +134,26 @@ export default function SeriesDetailScreen(
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <ScrollView
+      <PinnedHeaderScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        header={
+          <SeriesHeader
+            series={series}
+            images={imagesQ.data}
+            creator={creator}
+            topInset={insets.top}
+            activeTab={activeTab}
+            isInWatchlist={watchlist.inWatchlist}
+            onPressBack={onPressBack}
+            onChangeTab={setActiveTab}
+            onPressLog={handleOpenLogFlow}
+            onPressWatchlist={handleWatchlist}
+            onPressMore={() => setDrawerVisible(true)}
+          />
+        }
       >
-        <SeriesHeader
-          series={series}
-          images={imagesQ.data}
-          creator={creator}
-          topInset={insets.top}
-          activeTab={activeTab}
-          isInWatchlist={watchlist.inWatchlist}
-          onPressBack={onPressBack}
-          onChangeTab={setActiveTab}
-          onPressLog={handleOpenLogFlow}
-          onPressWatchlist={handleWatchlist}
-          onPressMore={() => setDrawerVisible(true)}
-        />
-
         {activeTab === 'about' ? (
           <SeriesAboutTab
             series={series}
@@ -171,7 +167,7 @@ export default function SeriesDetailScreen(
         {activeTab === 'trailer' ? <SeriesTrailerTab tmdbId={tmdbId} /> : null}
 
         {activeTab === 'photos' ? <PhotosTab images={imagesQ.data} /> : null}
-      </ScrollView>
+      </PinnedHeaderScrollView>
 
       <SeriesActionDrawer
         visible={drawerVisible}

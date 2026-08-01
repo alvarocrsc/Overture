@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +10,7 @@ import {
   TAB_BAR_HEIGHT,
 } from '@/src/lib/colors';
 import { SCREEN_PADDING_H } from '@/src/lib/layout';
+import PinnedHeaderScrollView from '@/src/components/shared/PinnedHeaderScrollView';
 import SectionHeader from '@/src/components/home/SectionHeader';
 import DiscoverSearchBar from '@/src/components/discover/DiscoverSearchBar';
 import SuggestionGrid from '@/src/components/discover/SuggestionGrid';
@@ -67,29 +62,29 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <PinnedHeaderScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 32 },
         ]}
+        header={
+          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+            <Text style={styles.headerTitle}>Discover</Text>
+            <Pressable
+              onPress={handleNotificationPress}
+              hitSlop={12}
+              style={styles.bellButton}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color={Colors.white}
+              />
+            </Pressable>
+          </View>
+        }
       >
-        {/* ── Header ── */}
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <Text style={styles.headerTitle}>Discover</Text>
-          <Pressable
-            onPress={handleNotificationPress}
-            hitSlop={12}
-            style={styles.bellButton}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={22}
-              color={Colors.white}
-            />
-          </Pressable>
-        </View>
-
         {/* ── Search ── */}
         <View style={styles.searchWrapper}>
           <DiscoverSearchBar onPress={handleSearchPress} />
@@ -119,7 +114,7 @@ export default function DiscoverScreen() {
             onCardPress={handleCardPress}
           />
         </View>
-      </ScrollView>
+      </PinnedHeaderScrollView>
     </View>
   );
 }
