@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontFamily, Spacing } from '@/src/lib/colors';
 import { backdropUrl } from '@/src/lib/tmdb';
 import type { CalendarEntry } from '@/src/types/stats.types';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import { formatRating } from '@/src/utils/rating-format.utils';
 
 interface Props {
   calendar: CalendarEntry[];
@@ -44,6 +46,9 @@ interface Cell {
  * backdrop and the highest rating given that day.
  */
 export default function ActivityCalendar({ calendar }: Props): React.JSX.Element {
+  // Stats aggregate films and series together, so there is no single media
+  // type; the calendar is labelled with the film format.
+  const ratingFormat = useRatingFormat('film');
   const today = new Date();
   const todayISO = toISODate(today);
 
@@ -109,7 +114,10 @@ export default function ActivityCalendar({ calendar }: Props): React.JSX.Element
                       <View style={styles.cellRating}>
                         <Ionicons name="star" size={7} color={Colors.accentBlue} />
                         <Text style={styles.cellRatingText}>
-                          {Number(cell.entry.highest_rating ?? 0).toFixed(1)}
+                          {formatRating(
+                            Number(cell.entry.highest_rating ?? 0),
+                            ratingFormat,
+                          )}
                         </Text>
                       </View>
                     </View>

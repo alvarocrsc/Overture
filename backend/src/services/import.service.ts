@@ -302,7 +302,8 @@ async function importDiaryRow(ctx: ImportContext, row: Record<string, string>): 
     return 'skipped';
   }
   const filmId = await resolveFilm(ctx, row['Name'], row['Year']);
-  const value = parseFloat(ratingRaw);
+  // Letterboxd exports a 0.5-5.0 star rating; double it into the canonical scale.
+  const value = parseFloat(ratingRaw) * 2;
   const watchedOn = parseLbDate(row['Watched Date']) ?? parseLbDate(row['Date']);
   const isRewatch = row['Rewatch'] === 'Yes';
   const lbUri = row['Letterboxd URI'] || null;
@@ -345,7 +346,8 @@ async function importRatingRow(
   );
   if (existing) return 'skipped';
 
-  const value = parseFloat(ratingRaw);
+  // Letterboxd exports a 0.5-5.0 star rating; double it into the canonical scale.
+  const value = parseFloat(ratingRaw) * 2;
   const watchedOn = parseLbDate(row['Date']);
   const lbUri = row['Letterboxd URI'] || null;
 

@@ -2,14 +2,19 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import DotGrid from '@/src/components/stats/DotGrid';
-import StarRating from '@/src/components/home/StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
+import { formatRating, toRatingBins } from '@/src/utils/rating-format.utils';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import type { MediaType } from '@/src/types/lists.types';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import type { FilmDistributionBin } from '@/src/types/film.types';
 
 interface FilmDistributionChartProps {
   distribution: FilmDistributionBin[];
-  /** App-wide average rating, or null when no ratings exist. */
+  /** App-wide average rating on the canonical 0-10 scale, or null. */
   average: number | null;
+  /** Which media type's rating format the scale is labelled in. */
+  mediaType: MediaType;
 }
 
 const CHART_WIDTH = 390;
@@ -31,18 +36,12 @@ const DOT_SPACING = 17;
 export default function FilmDistributionChart({
   distribution,
   average,
+  mediaType,
 }: FilmDistributionChartProps): React.JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const format = useRatingFormat(mediaType);
 
-  const bins = useMemo<FilmDistributionBin[]>(() => {
-    const map = new Map(distribution.map((b) => [b.value, b.count]));
-    const out: FilmDistributionBin[] = [];
-    for (let i = 1; i <= 10; i++) {
-      const value = i * 0.5;
-      out.push({ value, count: map.get(value) ?? 0 });
-    }
-    return out;
-  }, [distribution]);
+  const bins = useMemo(() => toRatingBins(distribution), [distribution]);
 
   const max = useMemo<number>(
     () => Math.max(1, ...bins.map((d) => d.count)),
@@ -116,7 +115,7 @@ export default function FilmDistributionChart({
 
           {/* Left scale: single star */}
           <View style={styles.scaleLeft} pointerEvents="none">
-            <StarRating rating={1} size={10} color={Colors.accentBlue} />
+            <RatingDisplay value={2} mediaType={mediaType} size={10} />
           </View>
 
           {/* Right side: average (idle) OR count + 5-star scale (scrubbing) */}
@@ -126,16 +125,16 @@ export default function FilmDistributionChart({
                 {bins[activeIndex!]!.count}
               </Text>
             ) : showAverage ? (
-              <Text style={styles.average}>{average!.toFixed(1)}</Text>
+              <Text style={styles.average}>{formatRating(average, format)}</Text>
             ) : null}
-            <StarRating
-              rating={
+            <RatingDisplay
+              value={
                 activeIndex !== null && bins[activeIndex] != null
                   ? bins[activeIndex]!.value
-                  : 5
+                  : 10
               }
+              mediaType={mediaType}
               size={10}
-              color={Colors.accentBlue}
             />
           </View>
         </View>

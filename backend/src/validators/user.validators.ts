@@ -10,6 +10,10 @@ export const updateMeSchema = z
     avatar_url: z.string().url().max(500).nullable().optional(),
     accent_color: z.string().regex(HEX_COLOR, 'Invalid hex color').optional(),
     profile_backdrop_tmdb_id: z.number().int().positive().nullable().optional(),
+    // Which scale the user sees ratings in, per media type. Episodes follow
+    // the series setting rather than having one of their own.
+    film_rating_format: z.enum(['stars', 'numeric']).optional(),
+    series_rating_format: z.enum(['stars', 'numeric']).optional(),
   })
   .strict();
 

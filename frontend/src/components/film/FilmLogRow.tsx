@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import StarRating from '@/src/components/home/StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 
@@ -49,7 +49,12 @@ export default function FilmLogRow({
       </Text>
       <View style={styles.right}>
         {latestRating != null ? (
-          <StarRating rating={latestRating} size={10} color={Colors.white} />
+          <RatingDisplay
+            value={latestRating}
+            mediaType={kind}
+            size={10}
+            color={Colors.white}
+          />
         ) : null}
         <Pressable
           onPress={onPressMore}

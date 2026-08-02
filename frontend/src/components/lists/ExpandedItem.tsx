@@ -9,6 +9,8 @@ import { useTitleTrailer } from '@/src/hooks/useTitleTrailer';
 import { useFilmMyLogs } from '@/src/hooks/useFilmDetail';
 import { useSeriesMyLogs } from '@/src/hooks/useSeriesDetail';
 import { useWatchlistToggle } from '@/src/hooks/useWatchlist';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import { formatRating } from '@/src/utils/rating-format.utils';
 import YoutubeBackgroundPlayer from '@/src/components/discover/YoutubeBackgroundPlayer';
 import type { NormalizedListItem } from '@/src/types/lists.types';
 
@@ -58,6 +60,7 @@ export function ExpandedItem({
   const userRating = logs && logs.length > 0 ? logs[0]!.value : null;
 
   const watchlist = useWatchlistToggle(item.tmdbId, item.mediaType);
+  const ratingFormat = useRatingFormat(item.mediaType);
 
   useEffect(() => {
     if (!active) setIsReady(false);
@@ -129,7 +132,9 @@ export function ExpandedItem({
                 color={Colors.accentBlue}
                 style={styles.ratingIcon}
               />
-              <Text style={styles.ratingText}>{userRating.toFixed(1)}</Text>
+              <Text style={styles.ratingText}>
+                {formatRating(userRating, ratingFormat)}
+              </Text>
             </View>
           )}
           <View style={styles.titleRow}>

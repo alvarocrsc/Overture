@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import StarRating from '@/src/components/home/StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
+import type { MediaType } from '@/src/types/lists.types';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
@@ -9,11 +10,14 @@ import type { FilmWatchedByRow } from '@/src/types/film.types';
 
 interface WatchedByCarouselProps {
   rows: FilmWatchedByRow[];
+  /** Which media type's rating format applies to the values shown. */
+  mediaType: MediaType;
   onPressUser: (userId: number) => void;
 }
 
 export default function WatchedByCarousel({
   rows,
+  mediaType,
   onPressUser,
 }: WatchedByCarouselProps): React.JSX.Element | null {
   const overlay = useOverlayNavigator();
@@ -52,7 +56,12 @@ export default function WatchedByCarousel({
                 </Text>
                 <View style={styles.starsRow}>
                   {row.rating != null ? (
-                    <StarRating rating={row.rating} size={9} color={Colors.white} />
+                    <RatingDisplay
+                      value={row.rating}
+                      mediaType={mediaType}
+                      size={9}
+                      color={Colors.white}
+                    />
                   ) : null}
                   {row.has_review ? (
                     <Ionicons

@@ -16,6 +16,8 @@ export const MOCK_PROFILE: UserProfile = {
   avatar_url: null,
   bio: null,
   location: 'Spain',
+  film_rating_format: 'stars',
+  series_rating_format: 'numeric',
   accent_color: '#1A77DA',
   profile_backdrop_tmdb_id: null,
   profile_backdrop_path: '/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg',

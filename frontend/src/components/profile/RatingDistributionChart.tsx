@@ -5,7 +5,8 @@ import {
   Gesture,
 } from 'react-native-gesture-handler';
 import DotGrid from '@/src/components/stats/DotGrid';
-import StarRating from '@/src/components/home/StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
+import { toRatingBins } from '@/src/utils/rating-format.utils';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import type { RatingDistributionEntry } from '@/src/types/stats.types';
 
@@ -26,6 +27,10 @@ const BAR_GAP = (BARS_WIDTH - BAR_WIDTH * 10) / 9;
 const MAX_BAR_HEIGHT = 60;
 const MIN_BAR_HEIGHT = 1;
 
+// The profile distribution mixes films and series, so it has no single media
+// type. It is labelled with the film format, the app's primary media.
+const PROFILE_SCALE_MEDIA = 'film' as const;
+
 const DOT_ROWS = 11;
 const DOT_SPACING = 17;
 
@@ -39,9 +44,14 @@ export default function RatingDistributionChart({
 }: RatingDistributionChartProps): React.JSX.Element {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
+  // Bucketed rather than used raw: the API omits ratings nobody gave, so
+  // indexing the raw array positionally would line bars up against the wrong
+  // ratings.
+  const bins = useMemo(() => toRatingBins(distribution), [distribution]);
+
   const max = useMemo<number>(
-    () => Math.max(1, ...distribution.map((d) => d.count)),
-    [distribution],
+    () => Math.max(1, ...bins.map((d) => d.count)),
+    [bins],
   );
 
   const updateActive = (x: number): void => {
@@ -88,7 +98,7 @@ export default function RatingDistributionChart({
 
           {/* Bars */}
           <View style={styles.bars} pointerEvents="none">
-            {distribution.slice(0, 10).map((d, i) => {
+            {bins.map((d, i) => {
               const ratio = d.count / max;
               const barH = Math.max(
                 MIN_BAR_HEIGHT,
@@ -114,24 +124,24 @@ export default function RatingDistributionChart({
 
           {/* Star scale below */}
           <View style={styles.scaleLeft} pointerEvents="none">
-            <StarRating rating={1} size={10} color={Colors.accentBlue} />
+            <RatingDisplay value={2} mediaType={PROFILE_SCALE_MEDIA} size={10} />
           </View>
 
           {/* Right scale: stars fixed at baseline; count floats above them */}
           <View style={styles.scaleRight} pointerEvents="none">
-            {activeIndex !== null && distribution[activeIndex] != null ? (
+            {activeIndex !== null && bins[activeIndex] != null ? (
               <Text style={styles.activeCount}>
-                {distribution[activeIndex]!.count}
+                {bins[activeIndex]!.count}
               </Text>
             ) : null}
-            <StarRating
-              rating={
-                activeIndex !== null && distribution[activeIndex] != null
-                  ? distribution[activeIndex]!.value
-                  : 5
+            <RatingDisplay
+              value={
+                activeIndex !== null && bins[activeIndex] != null
+                  ? bins[activeIndex]!.value
+                  : 10
               }
+              mediaType={PROFILE_SCALE_MEDIA}
               size={10}
-              color={Colors.accentBlue}
             />
           </View>
         </View>

@@ -3,7 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import SectionDivider from './SectionDivider';
-import StarRating from '@/src/components/home/StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
 import { posterUrl } from '@/src/lib/tmdb';
 import { SCREEN_PADDING_H, useLayout } from '@/src/lib/layout';
 import type { RecentActivityItem } from '@/src/types/profile.types';
@@ -63,7 +63,12 @@ export default function RecentActivityRow({
                 )}
               </View>
               <View style={styles.ratingRow}>
-                <StarRating rating={item.rating_value} size={10} gap={1} />
+                <RatingDisplay
+                  value={item.rating_value}
+                  mediaType={item.media_type}
+                  size={10}
+                  gap={1}
+                />
                 {item.review_id != null ? (
                   <Ionicons
                     name="reader-outline"

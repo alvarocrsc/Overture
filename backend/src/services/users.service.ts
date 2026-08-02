@@ -10,6 +10,12 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Which scale a user sees ratings in. Purely a display choice — every rating is
+ * stored on the canonical 0.0-10.0 scale regardless.
+ */
+export type RatingFormat = 'stars' | 'numeric';
+
 /** Public profile shape returned to the frontend. */
 export interface UserProfilePayload {
   id: number;
@@ -21,6 +27,10 @@ export interface UserProfilePayload {
   accent_color: string;
   profile_backdrop_tmdb_id: number | null;
   profile_backdrop_path: string | null;
+  /** Which scale this user sees film ratings in. */
+  film_rating_format: RatingFormat;
+  /** Which scale this user sees series (and episode) ratings in. */
+  series_rating_format: RatingFormat;
   followers_count: number;
   following_count: number;
   films_count: number;
@@ -62,6 +72,8 @@ interface BaseUserRow {
   accent_color: string;
   profile_backdrop_tmdb_id: number | null;
   profile_backdrop_path: string | null;
+  film_rating_format: RatingFormat;
+  series_rating_format: RatingFormat;
 }
 
 interface CountRow {
@@ -123,10 +135,15 @@ export async function getUserProfile(
        u.location,
        u.accent_color,
        u.profile_backdrop_tmdb_id,
-       COALESCE(f.backdrop_path, s.backdrop_path) AS profile_backdrop_path
+       COALESCE(f.backdrop_path, s.backdrop_path) AS profile_backdrop_path,
+       -- A preferences row only exists once onboarding has written one, so the
+       -- column defaults are applied here rather than assumed present.
+       COALESCE(p.film_rating_format, 'stars')     AS film_rating_format,
+       COALESCE(p.series_rating_format, 'numeric') AS series_rating_format
      FROM users u
      LEFT JOIN films  f ON f.tmdb_id = u.profile_backdrop_tmdb_id
      LEFT JOIN series s ON s.tmdb_id = u.profile_backdrop_tmdb_id
+     LEFT JOIN user_preferences p ON p.user_id = u.id
      WHERE u.id = ?
      LIMIT 1`,
     [userId],
@@ -195,6 +212,8 @@ export async function getUserProfile(
     accent_color: base.accent_color,
     profile_backdrop_tmdb_id: base.profile_backdrop_tmdb_id,
     profile_backdrop_path: base.profile_backdrop_path,
+    film_rating_format: base.film_rating_format,
+    series_rating_format: base.series_rating_format,
     followers_count: n(followers?.c),
     following_count: n(following?.c),
     films_count: n(films?.c),
@@ -245,6 +264,32 @@ export async function updateUserProfile(
   if (fields.length > 0) {
     params.push(userId);
     await execute(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
+  }
+
+  // The rating formats live on user_preferences rather than users, and the row
+  // may not exist yet, so this upserts instead of updating.
+  if (
+    patch.film_rating_format !== undefined ||
+    patch.series_rating_format !== undefined
+  ) {
+    // The bound params are repeated in the UPDATE clause rather than read back
+    // via VALUES(): the INSERT list substitutes a default for an omitted
+    // format, so VALUES() is never NULL and updating one format would silently
+    // reset the other.
+    await execute(
+      `INSERT INTO user_preferences (user_id, film_rating_format, series_rating_format)
+       VALUES (?, COALESCE(?, 'stars'), COALESCE(?, 'numeric'))
+       ON DUPLICATE KEY UPDATE
+         film_rating_format   = COALESCE(?, film_rating_format),
+         series_rating_format = COALESCE(?, series_rating_format)`,
+      [
+        userId,
+        patch.film_rating_format ?? null,
+        patch.series_rating_format ?? null,
+        patch.film_rating_format ?? null,
+        patch.series_rating_format ?? null,
+      ],
+    );
   }
 
   return getUserProfile(userId, userId);

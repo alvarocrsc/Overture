@@ -4,7 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Colors, FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
-import StarRating from './StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
+import type { MediaType } from '@/src/types/lists.types';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
 
 interface Props {
@@ -18,8 +19,10 @@ interface Props {
   userId: number;
   /** Avatar image URL for the friend. */
   avatarUrl: string | null;
-  /** Rating the friend gave (0–5 in 0.5 increments). */
+  /** Rating the friend gave, on the canonical 0.0-10.0 scale. */
   rating: number;
+  /** Whether the logged title is a film or a series. */
+  mediaType: MediaType;
   /** Review id, if the friend wrote a review for this log. */
   reviewId?: number | null;
   onPress?: () => void;
@@ -38,6 +41,7 @@ export default function FriendActivityCard({
   userId,
   avatarUrl,
   rating,
+  mediaType,
   reviewId,
   onPress,
   onAvatarPress,
@@ -70,7 +74,7 @@ export default function FriendActivityCard({
             {username}
           </Text>
           <View style={styles.ratingRow}>
-            <StarRating rating={rating} size={9} />
+            <RatingDisplay value={rating} mediaType={mediaType} size={9} />
             {reviewId != null ? (
               <Ionicons
                 name="reader-outline"

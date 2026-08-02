@@ -4,6 +4,10 @@ import { Share } from 'react-native';
 import { backdropUrl, logoUrl } from '@/src/lib/tmdb';
 import type { SeriesDetail, SeriesImages } from '@/src/types/series.types';
 import BottomDrawer from '@/src/components/drawers/bottom-drawer';
+import {
+  toCanonicalValue,
+  toStarValue,
+} from '@/src/utils/rating-format.utils';
 import MoreOptionsDrawerContent from '@/src/components/drawers/more-options-drawer-content';
 import AddToListDrawerContent from '@/src/components/drawers/add-to-list-drawer-content';
 import CreateListDrawerContent from '@/src/components/drawers/create-list-drawer-content';
@@ -37,19 +41,22 @@ export default function SeriesActionDrawer({
   onChangeAppearance,
 }: SeriesActionDrawerProps): React.JSX.Element {
   const [step, setStep] = useState<Step>('more');
-  const [rating, setRating] = useState<number>(series.user_rating ?? 0);
+  // The widget works in stars; the stored value is canonical.
+  const [rating, setRating] = useState<number>(
+    toStarValue(series.user_rating) ?? 0,
+  );
   const invalidateLists = useInvalidateLists();
 
   useEffect(() => {
     if (visible) {
       setStep('more');
-      setRating(series.user_rating ?? 0);
+      setRating(toStarValue(series.user_rating) ?? 0);
     }
   }, [visible, series.user_rating]);
 
   const handleRatingChange = (value: number): void => {
     setRating(value);
-    onChangeRating(value);
+    onChangeRating(toCanonicalValue(value));
   };
 
   const handleShare = async (): Promise<void> => {

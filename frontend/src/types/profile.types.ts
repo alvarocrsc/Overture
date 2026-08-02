@@ -3,6 +3,13 @@
  * The profile screen is composed entirely from this object plus a few
  * auxiliary endpoints (favorites, recent activity, rating distribution).
  */
+/**
+ * Which scale a user sees ratings in. A display choice only — every rating is
+ * stored on the canonical 0.0-10.0 scale regardless. Episodes follow the
+ * series setting.
+ */
+export type RatingFormat = 'stars' | 'numeric';
+
 export interface UserProfile {
   id: number;
   username: string;
@@ -13,6 +20,8 @@ export interface UserProfile {
   accent_color: string;
   profile_backdrop_tmdb_id: number | null;
   profile_backdrop_path: string | null;
+  film_rating_format: RatingFormat;
+  series_rating_format: RatingFormat;
   followers_count: number;
   following_count: number;
   films_count: number;

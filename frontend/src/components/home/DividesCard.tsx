@@ -5,6 +5,12 @@ import { Colors, FontFamily } from '@/src/lib/colors';
 import { posterUrl } from '@/src/lib/tmdb';
 import { FullStarIcon } from '@/src/components/icons/FullStarIcon';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import {
+  formatRating,
+  formatRatingDelta,
+} from '@/src/utils/rating-format.utils';
+import type { MediaType } from '@/src/types/lists.types';
 
 interface Props {
   /** TMDB poster file path for the film. */
@@ -17,6 +23,8 @@ interface Props {
   positivePercent: number;
   /** Lowest rating given by a friend. */
   worstRating: number;
+  /** Which media type's rating format applies. */
+  mediaType: MediaType;
   /** Highest rating given by a friend. */
   bestRating: number;
   /** Avatar URL of the friend who rated it worst. */
@@ -50,6 +58,7 @@ export default function DividesCard({
   negativePercent,
   positivePercent,
   worstRating,
+  mediaType,
   bestRating,
   worstAvatarUrl,
   bestAvatarUrl,
@@ -59,6 +68,7 @@ export default function DividesCard({
   ratingSpread,
   onSeeDebate,
 }: Props) {
+  const ratingFormat = useRatingFormat(mediaType);
   const uri = posterUrl(posterPath, 'w500');
   const badWidth = Math.round(BAR_WIDTH * negativePercent);
   const goodWidth = Math.round(BAR_WIDTH * positivePercent);
@@ -97,13 +107,17 @@ export default function DividesCard({
           <View style={styles.raterGroup}>
             <UserAvatar avatarUrl={worstAvatarUrl} username={worstUsername} size={AVATAR_SIZE} />
             <FullStarIcon size={12} color={Colors.dividesBad} />
-            <Text style={styles.ratingBad}>{worstRating.toFixed(1)}</Text>
+            <Text style={styles.ratingBad}>
+              {formatRating(worstRating, ratingFormat)}
+            </Text>
           </View>
 
           {/* Best rater */}
           <View style={styles.raterGroup}>
             <FullStarIcon size={12} color={Colors.dividesGood} />
-            <Text style={styles.ratingGood}>{bestRating.toFixed(1)}</Text>
+            <Text style={styles.ratingGood}>
+              {formatRating(bestRating, ratingFormat)}
+            </Text>
             <UserAvatar avatarUrl={bestAvatarUrl} username={bestUsername} size={AVATAR_SIZE} />
           </View>
         </View>
@@ -112,7 +126,7 @@ export default function DividesCard({
         <View style={styles.statRow}>
           <Text style={styles.statNormal}>{friendCount} friends · </Text>
           <FullStarIcon size={11} color={Colors.accentBlue} />
-          <Text style={styles.statAccent}> {ratingSpread.toFixed(1)} apart</Text>
+          <Text style={styles.statAccent}> {formatRatingDelta(ratingSpread, ratingFormat)} apart</Text>
         </View>
 
         {/* See the debate button */}

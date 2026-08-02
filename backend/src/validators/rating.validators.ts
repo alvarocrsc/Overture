@@ -1,11 +1,19 @@
 import { z } from 'zod';
 
-const VALID_RATING_VALUES = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
-
+/**
+ * Ratings are stored on the canonical 0.0-10.0 scale in 0.1 steps — the same
+ * scale as `episode_ratings`, so every rating in the app is directly
+ * comparable. Five stars is a display format layered on top: the client sends
+ * a 4.5-star rating as 9.0.
+ */
 const ratingValue = z
   .number()
-  .refine((v) => (VALID_RATING_VALUES as readonly number[]).includes(v), {
-    message: 'Rating value must be between 0.5 and 5 in 0.5 increments',
+  .min(0)
+  .max(10)
+  // Epsilon rather than `%`: 0.1 has no exact binary representation, so
+  // `v % 0.1` is not reliably 0 for valid inputs.
+  .refine((v) => Math.abs(v * 10 - Math.round(v * 10)) < 1e-9, {
+    message: 'Rating value must be between 0.0 and 10.0 in 0.1 increments',
   });
 
 const isoDate = z

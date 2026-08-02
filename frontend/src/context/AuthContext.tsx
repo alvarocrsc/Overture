@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import CookieManager from '@react-native-cookies/cookies';
 import api from '../lib/api';
 import { clearToken, getToken, setToken } from '../lib/token';
+import type { RatingFormat } from '../types/profile.types';
 
 export interface User {
   id: number;
@@ -16,6 +17,10 @@ export interface User {
   email: string;
   avatar_url: string | null;
   accent_color: string;
+  /** Scale this user sees film ratings in. */
+  film_rating_format: RatingFormat;
+  /** Scale this user sees series and episode ratings in. */
+  series_rating_format: RatingFormat;
 }
 
 export interface AuthContextType {

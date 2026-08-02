@@ -145,6 +145,7 @@ export default function SeriesAboutTab({
           <FilmDistributionChart
             distribution={distributionQ.data.distribution}
             average={distributionQ.data.average}
+            mediaType="series"
           />
         ) : null}
       </View>
@@ -161,7 +162,11 @@ export default function SeriesAboutTab({
       ) : null}
 
       {watchedByQ.data ? (
-        <WatchedByCarousel rows={watchedByQ.data} onPressUser={onPressUser} />
+        <WatchedByCarousel
+          rows={watchedByQ.data}
+          mediaType="series"
+          onPressUser={onPressUser}
+        />
       ) : null}
 
       {wantToWatchQ.data ? (

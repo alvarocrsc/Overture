@@ -38,6 +38,8 @@ import {
 import { timeAgo } from '@/src/lib/timeAgo';
 import { backdropUrl } from '@/src/lib/tmdb';
 import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import { formatRating } from '@/src/utils/rating-format.utils';
 
 interface ReviewBackdrop {
   url: string;
@@ -115,6 +117,12 @@ export default function ReviewScreen(
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const overlay = useOverlayNavigator();
+
+  // Both formats are read up front: which one applies depends on the review's
+  // media type, which is only known after the query resolves — below the point
+  // where hooks may still be called.
+  const filmRatingFormat = useRatingFormat('film');
+  const seriesRatingFormat = useRatingFormat('series');
 
   const inputRef = useRef<TextInput>(null);
   const [commentDraft, setCommentDraft] = useState<string>('');
@@ -372,7 +380,10 @@ export default function ReviewScreen(
               <Text style={styles.username}>{review.username}</Text>
               <View style={styles.ratingLine}>
                 <Text style={styles.ratingValue}>
-                  {review.value.toFixed(1)}
+                  {formatRating(
+                    review.value,
+                    isFilm ? filmRatingFormat : seriesRatingFormat,
+                  )}
                 </Text>
                 <FullStarIcon size={14} color={Colors.accentBlue} />
                 <Text style={styles.meta}>

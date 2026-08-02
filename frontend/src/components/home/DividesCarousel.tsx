@@ -46,6 +46,7 @@ function toCardProps(item: DividesRow) {
     title: item.title,
     negativePercent: item.negative_percent,
     positivePercent: item.positive_percent,
+    mediaType: item.media_type,
     worstRating: item.worst_rating,
     bestRating: item.best_rating,
     worstAvatarUrl: item.worst_avatar_url,

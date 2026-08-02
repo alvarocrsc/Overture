@@ -16,6 +16,7 @@ import { BackButton } from '@/src/components/auth/BackButton';
 import { BackdropCarousel } from '@/src/components/log/BackdropCarousel';
 import { DateSeenSheet } from '@/src/components/log/DateSeenSheet';
 import { ReviewBodyModal } from '@/src/components/log/ReviewBodyModal';
+import { toCanonicalValue } from '@/src/utils/rating-format.utils';
 import { FullStarIcon } from '@/src/components/icons/FullStarIcon';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
 import { useLog } from '@/src/context/LogContext';
@@ -83,7 +84,9 @@ export default function LogDetailsScreen(): React.JSX.Element {
       const payload: CreateRatingPayload = {
         tmdb_id: log.tmdbId,
         media_type: log.mediaType,
-        value: log.rating,
+        // LogContext holds the star value the picker produced; ratings are
+        // stored on the canonical 0-10 scale.
+        value: toCanonicalValue(log.rating),
         watched_on: toIsoDate(log.watchedOn),
         is_rewatch: log.isRewatch,
       };

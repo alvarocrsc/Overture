@@ -11,7 +11,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
-import StarRating from '@/src/components/home/StarRating';
+import RatingDisplay from '@/src/components/shared/RatingDisplay';
 import { LikeIcon } from '@/src/components/icons/LikeIcon';
 import { PosterSkeletonCell } from '@/src/components/library/LoggedPostersSkeleton';
 import {
@@ -73,7 +73,12 @@ const PosterCell = React.memo(function PosterCell({
       </View>
 
       <View style={styles.ratingRow}>
-        <StarRating rating={item.ratingValue} size={10} gap={1} />
+        <RatingDisplay
+          value={item.ratingValue}
+          mediaType={item.mediaType}
+          size={10}
+          gap={1}
+        />
         {item.isLiked ? <LikeIcon size={9} color={Colors.white} /> : null}
         {item.reviewId != null ? (
           <Ionicons name="reader-outline" size={11} color={Colors.white} />

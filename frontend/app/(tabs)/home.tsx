@@ -99,6 +99,7 @@ export default function HomeScreen() {
                 userId={item.user_id}
                 avatarUrl={item.avatar_url}
                 rating={item.rating}
+                mediaType={item.media_type}
                 reviewId={item.review_id}
                 onPress={() =>
                   handlePressFriendActivity(item.tmdb_id, item.media_type, item.review_id)

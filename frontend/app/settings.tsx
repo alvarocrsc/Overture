@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { BackButton } from '@/src/components/auth/BackButton';
 import { useAuth } from '@/src/context/AuthContext';
+import { useUpdateRatingFormat } from '@/src/hooks/use-update-rating-format';
+import RatingFormatRow from '@/src/components/settings/RatingFormatRow';
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 
 /**
@@ -26,6 +28,7 @@ import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 export default function SettingsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const updateRatingFormat = useUpdateRatingFormat();
 
   const handleSignOut = (): void => {
     Alert.alert(
@@ -68,6 +71,24 @@ export default function SettingsScreen(): React.JSX.Element {
           { paddingBottom: insets.bottom + 40 },
         ]}
       >
+        <SectionLabel label="Ratings" />
+        <RatingFormatRow
+          label="Films"
+          value={user?.film_rating_format ?? 'stars'}
+          disabled={updateRatingFormat.isPending}
+          onChange={(next) =>
+            updateRatingFormat.mutate({ film_rating_format: next })
+          }
+        />
+        <RatingFormatRow
+          label="Series & episodes"
+          value={user?.series_rating_format ?? 'numeric'}
+          disabled={updateRatingFormat.isPending}
+          onChange={(next) =>
+            updateRatingFormat.mutate({ series_rating_format: next })
+          }
+        />
+
         <SectionLabel label="Profile" />
         <Row
           icon={<Ionicons name="person-circle-outline" size={26} color={Colors.white} />}
