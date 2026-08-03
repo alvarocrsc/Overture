@@ -152,7 +152,7 @@ export async function searchSeries(
   searchQuery: string,
   userId: number | null = null,
 ): Promise<TmdbSeries[]> {
-  const series = await tmdbService.searchSeries(searchQuery);
+  const { results: series } = await tmdbService.searchSeries(searchQuery);
   for (const s of series) {
     await upsertSeries(s);
   }

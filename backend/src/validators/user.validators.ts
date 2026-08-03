@@ -10,12 +10,29 @@ export const updateMeSchema = z
     avatar_url: z.string().url().max(500).nullable().optional(),
     accent_color: z.string().regex(HEX_COLOR, 'Invalid hex color').optional(),
     profile_backdrop_tmdb_id: z.number().int().positive().nullable().optional(),
+    profile_backdrop_media_type: z.enum(['film', 'series']).nullable().optional(),
     // Which scale the user sees ratings in, per media type. Episodes follow
     // the series setting rather than having one of their own.
     film_rating_format: z.enum(['stars', 'numeric']).optional(),
     series_rating_format: z.enum(['stars', 'numeric']).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((patch, ctx) => {
+    // The id alone is ambiguous — TMDB numbers films and series separately, so
+    // setting a banner has to say which table the id belongs to. Clearing it
+    // needs no type, and the service nulls the pair together.
+    if (
+      patch.profile_backdrop_tmdb_id != null &&
+      patch.profile_backdrop_media_type == null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['profile_backdrop_media_type'],
+        message:
+          'profile_backdrop_media_type is required when setting profile_backdrop_tmdb_id',
+      });
+    }
+  });
 
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
 
@@ -52,3 +69,18 @@ export const updateFavoritesSchema = z
   .strict();
 
 export type UpdateFavoritesInput = z.infer<typeof updateFavoritesSchema>;
+
+/**
+ * Query params for the profile banner picker. Coerced from strings because
+ * these arrive on the query string, and clamped so the interpolated
+ * LIMIT/OFFSET can never carry anything but a bounded integer.
+ */
+export const backdropOptionsQuerySchema = z
+  .object({
+    q: z.string().trim().max(100).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(40).default(20),
+  })
+  .strict();
+
+export type BackdropOptionsQuery = z.infer<typeof backdropOptionsQuerySchema>;

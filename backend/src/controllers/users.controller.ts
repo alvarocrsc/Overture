@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import * as usersService from '../services/users.service';
+import * as profileBackdropService from '../services/profile-backdrop.service';
 import { AppError } from '../utils/app-error';
+import { backdropOptionsQuerySchema } from '../validators/user.validators';
 
 /** Parses `:id` route param and ensures it is a positive integer. */
 function parseUserIdParam(raw: unknown): number {
@@ -69,6 +71,14 @@ export async function getMyFavorites(req: Request, res: Response): Promise<void>
   const userId = req.user!.userId;
   const data = await usersService.getUserFavorites(userId);
   res.status(200).json({ data });
+}
+
+/** GET /api/v1/users/me/backdrop-options?q=&page=&limit= */
+export async function getMyBackdropOptions(req: Request, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const params = backdropOptionsQuerySchema.parse(req.query);
+  const page = await profileBackdropService.getBackdropOptions(userId, params);
+  res.status(200).json(page);
 }
 
 /** GET /api/v1/users/:id/favorites */

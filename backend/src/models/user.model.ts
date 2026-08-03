@@ -11,6 +11,11 @@ export interface User {
   role: 'user' | 'admin';
   accent_color: string;
   profile_backdrop_tmdb_id: number | null;
+  /**
+   * Which table `profile_backdrop_tmdb_id` points at. TMDB numbers films and
+   * series independently, so the id alone does not identify a title.
+   */
+  profile_backdrop_media_type: 'film' | 'series' | null;
   home_backdrop_tmdb_id: number | null;
   created_at: Date;
   updated_at: Date;

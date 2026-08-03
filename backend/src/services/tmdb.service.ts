@@ -59,17 +59,21 @@ export async function getNewReleases(): Promise<TmdbMovie[]> {
  * Searches TMDB for films matching the given query string.
  * @param searchQuery - The user-provided search term.
  * @param page - The page number to fetch (1-indexed).
- * @returns The results array and total page count.
+ * @returns The matching films plus TMDB's total page and result counts.
  */
 export async function searchFilms(
   searchQuery: string,
   page: number,
-): Promise<{ results: TmdbMovie[]; total_pages: number }> {
+): Promise<{ results: TmdbMovie[]; total_pages: number; total_results: number }> {
   const data = await tmdbFetch<TmdbPagedResponse<TmdbMovie>>('/search/movie', {
     query: searchQuery,
     page: String(page),
   });
-  return { results: data.results, total_pages: data.total_pages };
+  return {
+    results: data.results,
+    total_pages: data.total_pages,
+    total_results: data.total_results,
+  };
 }
 
 /**
@@ -135,13 +139,22 @@ export async function getNewSeries(): Promise<TmdbSeries[]> {
 /**
  * Searches TMDB for TV series matching the given query string.
  * @param searchQuery - The user-provided search term.
- * @returns An array of TmdbSeries objects.
+ * @param page - The page number to fetch (1-indexed).
+ * @returns The matching series plus TMDB's total page count.
  */
-export async function searchSeries(searchQuery: string): Promise<TmdbSeries[]> {
+export async function searchSeries(
+  searchQuery: string,
+  page = 1,
+): Promise<{ results: TmdbSeries[]; total_pages: number; total_results: number }> {
   const data = await tmdbFetch<TmdbPagedResponse<TmdbSeries>>('/search/tv', {
     query: searchQuery,
+    page: String(page),
   });
-  return data.results;
+  return {
+    results: data.results,
+    total_pages: data.total_pages,
+    total_results: data.total_results,
+  };
 }
 
 /**

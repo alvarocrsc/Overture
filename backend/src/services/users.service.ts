@@ -26,6 +26,8 @@ export interface UserProfilePayload {
   location: string | null;
   accent_color: string;
   profile_backdrop_tmdb_id: number | null;
+  /** Which table the banner id points at; null for a row set before it existed. */
+  profile_backdrop_media_type: 'film' | 'series' | null;
   profile_backdrop_path: string | null;
   /** Which scale this user sees film ratings in. */
   film_rating_format: RatingFormat;
@@ -71,6 +73,7 @@ interface BaseUserRow {
   location: string | null;
   accent_color: string;
   profile_backdrop_tmdb_id: number | null;
+  profile_backdrop_media_type: 'film' | 'series' | null;
   profile_backdrop_path: string | null;
   film_rating_format: RatingFormat;
   series_rating_format: RatingFormat;
@@ -135,14 +138,22 @@ export async function getUserProfile(
        u.location,
        u.accent_color,
        u.profile_backdrop_tmdb_id,
+       u.profile_backdrop_media_type,
        COALESCE(f.backdrop_path, s.backdrop_path) AS profile_backdrop_path,
        -- A preferences row only exists once onboarding has written one, so the
        -- column defaults are applied here rather than assumed present.
        COALESCE(p.film_rating_format, 'stars')     AS film_rating_format,
        COALESCE(p.series_rating_format, 'numeric') AS series_rating_format
      FROM users u
+     -- The media type disambiguates the id, which TMDB assigns independently
+     -- per type. Rows predating that column carry NULL and fall back to the
+     -- old film-first COALESCE, so no backfill is required.
      LEFT JOIN films  f ON f.tmdb_id = u.profile_backdrop_tmdb_id
+                       AND (u.profile_backdrop_media_type = 'film'
+                            OR u.profile_backdrop_media_type IS NULL)
      LEFT JOIN series s ON s.tmdb_id = u.profile_backdrop_tmdb_id
+                       AND (u.profile_backdrop_media_type = 'series'
+                            OR u.profile_backdrop_media_type IS NULL)
      LEFT JOIN user_preferences p ON p.user_id = u.id
      WHERE u.id = ?
      LIMIT 1`,
@@ -211,6 +222,7 @@ export async function getUserProfile(
     location: base.location,
     accent_color: base.accent_color,
     profile_backdrop_tmdb_id: base.profile_backdrop_tmdb_id,
+    profile_backdrop_media_type: base.profile_backdrop_media_type,
     profile_backdrop_path: base.profile_backdrop_path,
     film_rating_format: base.film_rating_format,
     series_rating_format: base.series_rating_format,
@@ -252,6 +264,7 @@ export async function updateUserProfile(
     'avatar_url',
     'accent_color',
     'profile_backdrop_tmdb_id',
+    'profile_backdrop_media_type',
   ];
 
   for (const key of assignable) {
@@ -259,6 +272,16 @@ export async function updateUserProfile(
       fields.push(`\`${key}\` = ?`);
       params.push(patch[key] as string | number | null);
     }
+  }
+
+  // Clearing the banner drops its media type too, whether or not the client
+  // sent one — a type left behind would point at a title that is no longer set.
+  if (
+    patch.profile_backdrop_tmdb_id === null &&
+    patch.profile_backdrop_media_type === undefined
+  ) {
+    fields.push('`profile_backdrop_media_type` = ?');
+    params.push(null);
   }
 
   if (fields.length > 0) {

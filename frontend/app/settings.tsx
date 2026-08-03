@@ -91,6 +91,14 @@ export default function SettingsScreen(): React.JSX.Element {
 
         <SectionLabel label="Profile" />
         <Row
+          icon={<Ionicons name="image-outline" size={24} color={Colors.white} />}
+          label="Profile banner"
+          sublabel="Choose the backdrop behind your profile"
+          // Belongs in Edit profile once that screen exists.
+          // Cast until the typed-routes union regenerates (see api.ts).
+          onPress={() => router.push('/profile-backdrop' as unknown as Href)}
+        />
+        <Row
           icon={<Ionicons name="person-circle-outline" size={26} color={Colors.white} />}
           label="Account & Privacy"
           onPress={() => notImplemented('Account & Privacy')}
