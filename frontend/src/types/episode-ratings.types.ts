@@ -65,5 +65,10 @@ export interface CreateEpisodeRatingPayload {
   value: number | null;
   watched_on?: string | null;
   is_rewatch?: boolean;
-  review?: { body: string; contains_spoilers: boolean } | null;
+  review?: {
+    body: string;
+    contains_spoilers: boolean;
+    /** TMDB image paths to attach to the review. */
+    backdrop_paths?: string[];
+  } | null;
 }

@@ -1,7 +1,11 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { LogProvider, type LogMediaType } from '@/src/context/LogContext';
+import {
+  LogProvider,
+  type LogEpisodeInfo,
+  type LogMediaType,
+} from '@/src/context/LogContext';
 
 /**
  * Layout for the /log/* route group. Reads initial title info from the
@@ -17,6 +21,8 @@ export default function LogLayout(): React.JSX.Element {
     director?: string;
     posterPath?: string;
     backdrops?: string;
+    seasonNumber?: string;
+    episodeNumber?: string;
   }>();
 
   const tmdbId = useMemo<number>(() => {
@@ -26,6 +32,16 @@ export default function LogLayout(): React.JSX.Element {
 
   const mediaType: LogMediaType =
     params.mediaType === 'series' ? 'series' : 'film';
+
+  // Both numbers must be present and valid for this to be an episode log;
+  // anything else is a whole-title log.
+  const episode = useMemo<LogEpisodeInfo | null>(() => {
+    const seasonNumber = Number(params.seasonNumber);
+    const episodeNumber = Number(params.episodeNumber);
+    if (!Number.isInteger(seasonNumber) || seasonNumber <= 0) return null;
+    if (!Number.isInteger(episodeNumber) || episodeNumber <= 0) return null;
+    return { seasonNumber, episodeNumber };
+  }, [params.seasonNumber, params.episodeNumber]);
 
   const availableBackdrops = useMemo<string[]>(() => {
     if (!params.backdrops) return [];
@@ -49,6 +65,7 @@ export default function LogLayout(): React.JSX.Element {
       director={params.director ?? null}
       posterPath={params.posterPath ?? null}
       availableBackdrops={availableBackdrops}
+      episode={episode}
     >
       <StatusBar style="light" />
       <Stack

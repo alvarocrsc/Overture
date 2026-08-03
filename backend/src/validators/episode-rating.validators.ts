@@ -19,9 +19,14 @@ const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'watched_on must be a valid date in YYYY-MM-DD format');
 
+const backdropPath = z
+  .string()
+  .regex(/^\/[\w\-./]+\.(jpg|jpeg|png|webp)$/i, 'Invalid TMDB image path');
+
 const reviewInput = z.object({
   body: z.string().min(1).max(5000),
   contains_spoilers: z.boolean().optional().default(false),
+  backdrop_paths: z.array(backdropPath).max(10).optional().default([]),
 });
 
 export const createEpisodeRatingSchema = z.object({

@@ -16,7 +16,12 @@ import { BackButton } from '@/src/components/auth/BackButton';
 import { BackdropCarousel } from '@/src/components/log/BackdropCarousel';
 import { DateSeenSheet } from '@/src/components/log/DateSeenSheet';
 import { ReviewBodyModal } from '@/src/components/log/ReviewBodyModal';
-import { toCanonicalValue } from '@/src/utils/rating-format.utils';
+import {
+  formatRating,
+  toCanonicalValue,
+} from '@/src/utils/rating-format.utils';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import { createEpisodeRating } from '@/src/services/episode-ratings.service';
 import { FullStarIcon } from '@/src/components/icons/FullStarIcon';
 import { UserAvatar } from '@/src/components/shared/UserAvatar';
 import { useLog } from '@/src/context/LogContext';
@@ -62,6 +67,7 @@ interface CreateRatingResponse {
 export default function LogDetailsScreen(): React.JSX.Element {
   const log = useLog();
   const { user } = useAuth();
+  const ratingFormat = useRatingFormat(log.mediaType);
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
 
@@ -70,38 +76,60 @@ export default function LogDetailsScreen(): React.JSX.Element {
 
   const subtitle = [log.year, log.director].filter(Boolean).join('  ·  ');
 
-  const adjustRating = (delta: number): void => {
-    const next = Math.max(0.5, Math.min(5, log.rating + delta));
-    log.setRating(next);
+  // One nudge moves half a star for a star viewer and a tenth for a numeric
+  // one, on the canonical 0-10 scale either way.
+  const ratingStep = ratingFormat === 'stars' ? toCanonicalValue(0.5) : 0.1;
+
+  const adjustRating = (direction: number): void => {
+    const next = log.rating + direction * ratingStep;
+    log.setRating(Number(Math.max(0, Math.min(10, next)).toFixed(1)));
   };
 
-  const logMutation = useMutation<
-    CreateRatingResponse['data'],
-    Error,
-    void
-  >({
+  const logMutation = useMutation<{ reviewId: number | null }, Error, void>({
     mutationFn: async () => {
+      const trimmedReview = log.reviewBody.trim();
+
+      // An episode goes through these same screens; only the endpoint differs.
+      if (log.episode) {
+        await createEpisodeRating({
+          tmdb_series_id: log.tmdbId,
+          season_number: log.episode.seasonNumber,
+          episode_number: log.episode.episodeNumber,
+          value: log.rating,
+          watched_on: toIsoDate(log.watchedOn),
+          is_rewatch: log.isRewatch,
+          review:
+            trimmedReview.length > 0
+              ? {
+                  body: trimmedReview,
+                  contains_spoilers: false,
+                  backdrop_paths: log.selectedBackdropPaths,
+                }
+              : null,
+        });
+        // TODO(episode-review): episode reviews have no screen to open yet, so
+        // the flow returns to the series instead.
+        return { reviewId: null };
+      }
+
       const payload: CreateRatingPayload = {
         tmdb_id: log.tmdbId,
         media_type: log.mediaType,
-        // LogContext holds the star value the picker produced; ratings are
-        // stored on the canonical 0-10 scale.
-        value: toCanonicalValue(log.rating),
+        value: log.rating,
         watched_on: toIsoDate(log.watchedOn),
         is_rewatch: log.isRewatch,
       };
-      const trimmed = log.reviewBody.trim();
-      if (trimmed.length > 0) {
+      if (trimmedReview.length > 0) {
         payload.review = {
-          body: trimmed,
+          body: trimmedReview,
           contains_spoilers: false,
           backdrop_paths: log.selectedBackdropPaths,
         };
       }
       const res = await api.post<CreateRatingResponse>('/ratings', payload);
-      return res.data.data;
+      return { reviewId: res.data.data.review_id ?? null };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ reviewId }) => {
       // Invalidate queries that reflect the user's logged state for this title.
       const queryKey =
         log.mediaType === 'film'
@@ -120,10 +148,10 @@ export default function LogDetailsScreen(): React.JSX.Element {
       queryClient.invalidateQueries({ queryKey: ['divides'] });
 
       log.reset();
-      if (data.review_id != null) {
+      if (reviewId != null) {
         router.replace({
           pathname: '/review/[id]',
-          params: { id: String(data.review_id) },
+          params: { id: String(reviewId) },
         });
       } else {
         // Pop both /log/details and /log/rating off the stack.
@@ -185,7 +213,7 @@ export default function LogDetailsScreen(): React.JSX.Element {
               <Text style={styles.username}>{user?.username ?? ''}</Text>
               <View style={styles.ratingValueRow}>
                 <Text style={styles.ratingValue}>
-                  {log.rating.toFixed(1)}
+                  {formatRating(log.rating, ratingFormat)}
                 </Text>
                 <FullStarIcon size={14} color={Colors.accentBlue} />
               </View>
@@ -193,7 +221,7 @@ export default function LogDetailsScreen(): React.JSX.Element {
           </View>
           <View style={styles.arrowPill}>
             <Pressable
-              onPress={() => adjustRating(-0.5)}
+              onPress={() => adjustRating(-1)}
               hitSlop={8}
               style={({ pressed }) => [
                 styles.arrowBtn,
@@ -206,7 +234,7 @@ export default function LogDetailsScreen(): React.JSX.Element {
             </Pressable>
             <View style={styles.arrowDivider} />
             <Pressable
-              onPress={() => adjustRating(0.5)}
+              onPress={() => adjustRating(1)}
               hitSlop={8}
               style={({ pressed }) => [
                 styles.arrowBtn,

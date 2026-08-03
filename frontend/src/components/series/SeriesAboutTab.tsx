@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors, FontFamily, LetterSpacing } from '@/src/lib/colors';
 import {
   useSeriesCredits,
   useSeriesDistribution,
+  useSeriesImages,
   useSeriesWantToWatch,
   useSeriesWatchedBy,
 } from '@/src/hooks/useSeriesDetail';
@@ -16,12 +18,7 @@ import WantToWatchCarousel from '@/src/components/film/WantToWatchCarousel';
 import CastCrewGenresTabs from '@/src/components/film/CastCrewGenresTabs';
 import EpisodeRatingsSection from '@/src/components/series/EpisodeRatingsSection';
 import SeasonsCarousel from '@/src/components/series/SeasonsCarousel';
-import LogEpisodeDrawerContent from '@/src/components/series/log-episode-drawer-content';
-import BottomDrawer from '@/src/components/drawers/bottom-drawer';
-import { useCreateEpisodeRating } from '@/src/hooks/use-episode-ratings';
-import { backdropUrl } from '@/src/lib/tmdb';
 import type {
-  CreateEpisodeRatingPayload,
   EpisodeListRow,
   RatingSource,
 } from '@/src/types/episode-ratings.types';
@@ -30,14 +27,6 @@ interface SeriesAboutTabProps {
   series: SeriesDetail;
   onPressLogMore: () => void;
   onPressUser: (userId: number) => void;
-}
-
-/** The episode the log drawer is currently open for. */
-interface EpisodeLogTarget {
-  seasonNumber: number;
-  episodeNumber: number;
-  name: string | null;
-  value: number | null;
 }
 
 const OVERVIEW_PREVIEW_LINES = 4;
@@ -54,6 +43,9 @@ export default function SeriesAboutTab({
   const creditsQ = useSeriesCredits(tmdbId);
   const watchedByQ = useSeriesWatchedBy(tmdbId);
   const wantToWatchQ = useSeriesWantToWatch(tmdbId);
+  // Same query key the series screen already uses, so this is served from cache
+  // rather than costing a second request.
+  const imagesQ = useSeriesImages(tmdbId);
 
   const [overviewExpanded, setOverviewExpanded] = useState<boolean>(false);
 
@@ -62,27 +54,61 @@ export default function SeriesAboutTab({
   // so both stay in sync off a single piece of state.
   const [source, setSource] = useState<RatingSource>(user ? 'user' : 'app');
   const [expandedSeason, setExpandedSeason] = useState<number | null>(null);
-  const [episodeToLog, setEpisodeToLog] = useState<EpisodeLogTarget | null>(null);
 
-  const createEpisodeRating = useCreateEpisodeRating(tmdbId);
+  /**
+   * Opens the shared rating flow for one episode. Episodes go through the same
+   * two screens as films and whole series — rating, then review — with the
+   * season and episode carried along so the details screen knows to log an
+   * episode rather than the series itself.
+   */
+  const openEpisodeLog = (
+    seasonNumber: number,
+    episodeNumber: number,
+    episodeName: string | null,
+    stillPath: string | null,
+  ): void => {
+    // The episode's own still leads, since it is the image most likely to be
+    // wanted for that review, followed by the series' backdrops.
+    const seriesBackdrops = [
+      ...(imagesQ.data?.cleanBackdrops ?? []),
+      ...(imagesQ.data?.titledBackdrops ?? []),
+    ].map((image) => image.file_path);
+    const backdrops = [...(stillPath ? [stillPath] : []), ...seriesBackdrops]
+      .slice(0, 10);
+
+    router.push({
+      pathname: '/log/rating',
+      params: {
+        tmdbId: String(series.tmdb_id),
+        mediaType: 'series',
+        title: episodeName ?? `Episode ${episodeNumber}`,
+        year: `S${seasonNumber} · E${episodeNumber}`,
+        director: series.title,
+        posterPath: series.poster_path ?? '',
+        seasonNumber: String(seasonNumber),
+        episodeNumber: String(episodeNumber),
+        backdrops: JSON.stringify(backdrops),
+      },
+    });
+  };
 
   const handleEpisodeCellPress = (
     seasonNumber: number,
     episodeNumber: number,
   ): void => {
-    setEpisodeToLog({ seasonNumber, episodeNumber, name: null, value: null });
+    openEpisodeLog(seasonNumber, episodeNumber, null, null);
   };
 
   const handleEpisodeLogPress = (
     seasonNumber: number,
     episode: EpisodeListRow,
   ): void => {
-    setEpisodeToLog({
+    openEpisodeLog(
       seasonNumber,
-      episodeNumber: episode.episode_number,
-      name: episode.name,
-      value: episode.value,
-    });
+      episode.episode_number,
+      episode.name,
+      episode.still_path,
+    );
   };
 
   const handleEpisodePress = (
@@ -92,15 +118,6 @@ export default function SeriesAboutTab({
     // TODO(episode-detail): navigate to the episode detail screen once designed.
     // Until it exists, tapping a row opens the same log flow as its button.
     handleEpisodeLogPress(seasonNumber, episode);
-  };
-
-  const handleSaveEpisodeLog = (
-    payload: Omit<CreateEpisodeRatingPayload, 'tmdb_series_id'>,
-  ): void => {
-    createEpisodeRating.mutate(
-      { ...payload, tmdb_series_id: tmdbId },
-      { onSuccess: () => setEpisodeToLog(null) },
-    );
   };
 
   return (
@@ -181,26 +198,6 @@ export default function SeriesAboutTab({
         crew={creditsQ.data?.crew ?? []}
         genres={series.genres}
       />
-
-      <BottomDrawer
-        visible={episodeToLog !== null}
-        onClose={() => setEpisodeToLog(null)}
-        backdropImageUri={backdropUrl(series.backdrop_path, 'w1280')}
-        logoUri={null}
-        titleFallback={series.title}
-        showDoneButton={false}
-      >
-        {episodeToLog ? (
-          <LogEpisodeDrawerContent
-            seasonNumber={episodeToLog.seasonNumber}
-            episodeNumber={episodeToLog.episodeNumber}
-            episodeName={episodeToLog.name}
-            initialValue={episodeToLog.value}
-            isSaving={createEpisodeRating.isPending}
-            onSave={handleSaveEpisodeLog}
-          />
-        ) : null}
-      </BottomDrawer>
     </View>
   );
 }

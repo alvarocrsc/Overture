@@ -26,7 +26,11 @@ export interface SeasonSummary {
   avg_rating: number | null;
 }
 
-/** Watch-progress pointer: the furthest episode the user has logged. */
+/**
+ * Where the user is up to in a series: the episode immediately after the
+ * furthest one they have logged — i.e. the one to watch next, not the one they
+ * just finished.
+ */
 export interface CurrentEpisodePointer {
   season_number: number;
   episode_number: number;
@@ -182,18 +186,31 @@ export async function getEpisodeRatingsGrid(
   }
 
   // The pointer is personal progress, so it only exists for a signed-in user
-  // reading their own ratings. It counts watched-only logs too, not just rated
-  // ones — it marks how far through the show they are.
+  // reading their own ratings. Watched-only logs count towards it too, not just
+  // rated ones.
+  //
+  // It marks the episode *after* the furthest logged one — what to watch next.
+  // The row comparison finds the first episode ordered past that point; if the
+  // user has logged nothing the subquery is empty, the comparison is NULL, and
+  // no pointer is returned. Likewise once they finish the last cached episode.
   let currentEpisode: CurrentEpisodePointer | null = null;
   if (source === 'user' && userId !== null) {
     const [pointer] = await query<CurrentEpisodePointer>(
       `SELECT e.season_number, e.episode_number, e.still_path
-         FROM episode_ratings er
-         JOIN episodes e ON er.episode_id = e.id
-        WHERE e.series_id = ? AND er.user_id = ?
-        ORDER BY e.season_number DESC, e.episode_number DESC
+         FROM episodes e
+        WHERE e.series_id = ?
+          AND (e.season_number, e.episode_number) > (
+                SELECT furthest.season_number, furthest.episode_number
+                  FROM episode_ratings er
+                  JOIN episodes furthest ON er.episode_id = furthest.id
+                 WHERE furthest.series_id = ? AND er.user_id = ?
+                 ORDER BY furthest.season_number DESC,
+                          furthest.episode_number DESC
+                 LIMIT 1
+              )
+        ORDER BY e.season_number ASC, e.episode_number ASC
         LIMIT 1`,
-      [localSeriesId, userId],
+      [localSeriesId, localSeriesId, userId],
     );
     currentEpisode = pointer ?? null;
   }
@@ -332,6 +349,7 @@ export async function createEpisodeRating(
         userId,
         data.review.body,
         data.review.contains_spoilers,
+        data.review.backdrop_paths,
       )
     : null;
 
@@ -387,6 +405,7 @@ export async function updateEpisodeRating(
         userId,
         data.review.body,
         data.review.contains_spoilers,
+        data.review.backdrop_paths,
       );
     }
   }
@@ -408,12 +427,18 @@ export async function deleteEpisodeRating(
   await execute(`DELETE FROM episode_ratings WHERE id = ?`, [episodeRatingId]);
 }
 
-/** Inserts or replaces the review attached to an episode log. */
+/**
+ * Inserts or replaces the review attached to an episode log, along with any
+ * TMDB images attached to it.
+ *
+ * @param backdropPaths - TMDB paths to attach, replacing whatever was there.
+ */
 async function upsertEpisodeReview(
   episodeRatingId: number,
   userId: number,
   body: string,
   containsSpoilers: boolean,
+  backdropPaths: string[] = [],
 ): Promise<number> {
   await execute(
     `INSERT INTO episode_reviews (episode_rating_id, user_id, body, contains_spoilers)
@@ -431,6 +456,30 @@ async function upsertEpisodeReview(
   if (!review) {
     throw new AppError('Episode review write failed unexpectedly', 500);
   }
+
+  // Replaced wholesale rather than merged: this is an upsert, so the paths sent
+  // are the complete intended set and re-saving must not stack duplicates.
+  await execute(`DELETE FROM review_media WHERE episode_review_id = ?`, [
+    review.id,
+  ]);
+
+  for (let position = 0; position < backdropPaths.length; position++) {
+    const path = backdropPaths[position];
+    if (path === undefined) continue;
+    await execute(
+      `INSERT INTO review_media
+         (episode_review_id, media_type, source, source_id, url, preview_url, position)
+       VALUES (?, 'image', 'tmdb', ?, ?, ?, ?)`,
+      [
+        review.id,
+        path,
+        `https://image.tmdb.org/t/p/w1280${path}`,
+        `https://image.tmdb.org/t/p/w780${path}`,
+        position,
+      ],
+    );
+  }
+
   return review.id;
 }
 

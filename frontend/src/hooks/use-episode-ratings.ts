@@ -8,7 +8,6 @@ import {
 
 import * as episodeRatingsService from '@/src/services/episode-ratings.service';
 import type {
-  CreateEpisodeRatingPayload,
   EpisodeListRow,
   EpisodeRatingsGrid,
   RatingSource,
@@ -90,24 +89,6 @@ export function useLogEntireSeason(
   return useMutation({
     mutationFn: (seasonNumber: number) =>
       episodeRatingsService.logEntireSeason(tmdbId, seasonNumber),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['series', tmdbId] });
-    },
-  });
-}
-
-/** Logs a single episode, then refreshes every view of this series. */
-export function useCreateEpisodeRating(
-  tmdbId: number,
-): UseMutationResult<
-  { episodeRatingId: number; episodeReviewId: number | null },
-  Error,
-  CreateEpisodeRatingPayload
-> {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: CreateEpisodeRatingPayload) =>
-      episodeRatingsService.createEpisodeRating(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['series', tmdbId] });
     },

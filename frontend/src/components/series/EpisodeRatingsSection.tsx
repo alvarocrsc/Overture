@@ -37,17 +37,12 @@ import type {
 
 const OVERTURE_LOGO = require('@/assets/images/overture-logo.png');
 
-/** Horizontal screen padding, matching the rest of the series screen. */
 const SCREEN_PADDING = 20;
-/** Gap between heatmap cells on both axes (Figma: 34.9 pitch on a 32 cell). */
 const CELL_GAP = 3;
-/** Cell size in the collapsed season row and the full expanded grid (Figma). */
 const MAX_CELL_SIZE = 32;
 /** Cell size ceiling in compact mode, so more of the grid fits on screen. */
 const MAX_COMPACT_CELL_SIZE = 18;
-/** Gutter reserved for the episode-number labels down the left of the grid. */
 const ROW_LABEL_WIDTH = 18;
-/** Cell corner radius (Figma). */
 const CELL_RADIUS = 5;
 
 const SWITCH_WIDTH = 85;
@@ -548,6 +543,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   currentDot: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
     width: 8,
     height: 8,
     borderRadius: 4,

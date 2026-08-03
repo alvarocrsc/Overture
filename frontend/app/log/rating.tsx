@@ -10,6 +10,13 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BackButton } from '@/src/components/auth/BackButton';
 import { SwipeableStarRating } from '@/src/components/log/SwipeableStarRating';
+import NumericRatingSlider from '@/src/components/log/NumericRatingSlider';
+import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import {
+  formatRating,
+  toCanonicalValue,
+  toStarValue,
+} from '@/src/utils/rating-format.utils';
 import { useLog } from '@/src/context/LogContext';
 import {
   Colors,
@@ -22,19 +29,20 @@ import {
 
 /**
  * Review Screen 1: "Introduce your rating".
- * Lets the user pick a 0.5–5 star rating via tap or swipe and continue to
- * the review details screen.
+ * Lets the user set a rating and continue to the review details screen —
+ * with the five-star picker or the 0-10 ruler, whichever scale they prefer
+ * for this media type. Either way the value it stores is canonical.
  */
 export default function LogRatingScreen(): React.JSX.Element {
   const log = useLog();
   const insets = useSafeAreaInsets();
+  const ratingFormat = useRatingFormat(log.mediaType);
 
   const handleContinue = (): void => {
     router.push('/log/details');
   };
 
-  // Format the rating: hide leading zero, show one decimal.
-  const ratingText = log.rating.toFixed(1);
+  const ratingText = formatRating(log.rating, ratingFormat) ?? '';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -46,14 +54,20 @@ export default function LogRatingScreen(): React.JSX.Element {
         <Text style={styles.title}>Introduce your rating</Text>
         <Text style={styles.subtitle}>How good was it?</Text>
 
-        <View style={styles.starsRow}>
-          <SwipeableStarRating
-            value={log.rating}
-            onChange={log.setRating}
-          />
-        </View>
+        {ratingFormat === 'numeric' ? (
+          <NumericRatingSlider value={log.rating} onChange={log.setRating} />
+        ) : (
+          <>
+            <View style={styles.starsRow}>
+              <SwipeableStarRating
+                value={toStarValue(log.rating) ?? 0}
+                onChange={(stars) => log.setRating(toCanonicalValue(stars))}
+              />
+            </View>
 
-        <Text style={styles.ratingValue}>{ratingText}</Text>
+            <Text style={styles.ratingValue}>{ratingText}</Text>
+          </>
+        )}
       </View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET - 16}]}>

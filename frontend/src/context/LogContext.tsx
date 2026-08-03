@@ -8,6 +8,15 @@ import {
 
 export type LogMediaType = 'film' | 'series';
 
+/**
+ * Identifies a single episode when the log flow is being used to rate one.
+ * Null for a film or a whole series.
+ */
+export interface LogEpisodeInfo {
+  seasonNumber: number;
+  episodeNumber: number;
+}
+
 /** Initial film/series data passed in when entering the log flow. */
 interface LogTitleInfo {
   tmdbId: number;
@@ -18,6 +27,12 @@ interface LogTitleInfo {
   posterPath: string | null;
   /** TMDB backdrop paths available for attachment to a review. */
   availableBackdrops: string[];
+  /**
+   * Set when rating one episode rather than the whole title. The flow is
+   * otherwise identical — only the endpoint the details screen submits to
+   * changes.
+   */
+  episode: LogEpisodeInfo | null;
 }
 
 /** Mutable user input collected across the log flow. */
@@ -41,7 +56,8 @@ export interface LogContextValue extends LogTitleInfo, LogUserInput {
 }
 
 const MAX_BACKDROPS = 10;
-const DEFAULT_RATING = 2.5;
+/** Canonical 0.0-10.0 scale — the midpoint, i.e. 2.5 stars. */
+const DEFAULT_RATING = 5.0;
 
 const LogContext = createContext<LogContextValue | null>(null);
 
@@ -76,6 +92,7 @@ export function LogProvider({
   director,
   posterPath,
   availableBackdrops,
+  episode,
   children,
 }: LogProviderProps): React.JSX.Element {
   const [input, setInput] = useState<LogUserInput>(() => ({
@@ -142,6 +159,7 @@ export function LogProvider({
       director,
       posterPath,
       availableBackdrops,
+      episode,
       rating: input.rating,
       watchedOn: input.watchedOn,
       reviewBody: input.reviewBody,
@@ -162,6 +180,7 @@ export function LogProvider({
       director,
       posterPath,
       availableBackdrops,
+      episode,
       input,
       setRating,
       setWatchedOn,

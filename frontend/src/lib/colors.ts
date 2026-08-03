@@ -43,6 +43,8 @@ export const Colors = {
   bannerBackground: '#292929',
   /** Import progress bar track (light) — #d9d9d9 */
   importTrack: '#d9d9d9',
+  /** Ruler tick mark on the numeric rating slider — #8c8c8c */
+  rulerTick: '#8c8c8c',
 } as const;
 
 // ─── Typography ──────────────────────────────────────────────────────────────

@@ -462,15 +462,27 @@ export async function getMyStats(
     avgPerWeek = Math.round((totalLogged / weeksActive) * 10) / 10;
   }
 
-  // Q5 — rating distribution: fill all 10 buckets
-  const ALL_STAR_VALUES = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0];
-  const distMap = new Map<number, number>();
+  // Q5 — rating distribution: ten buckets on the canonical 0-10 scale, one per
+  // half star (1 = half a star … 10 = five stars).
+  //
+  // Values are bucketed by range rather than matched exactly. An exact match
+  // silently drops anything that is not one of the ten expected numbers — which
+  // is every rating above five once the scale became canonical, and every
+  // fractional rating a numeric-format user enters.
+  const RATING_BUCKET_COUNT = 10;
+  const bucketCounts = new Array<number>(RATING_BUCKET_COUNT).fill(0);
   for (const row of distributionRows) {
-    distMap.set(Number(row.value), row.count);
+    const value = Number(row.value);
+    if (!Number.isFinite(value)) continue;
+    const bucket = Math.min(
+      Math.max(Math.ceil(value), 1),
+      RATING_BUCKET_COUNT,
+    );
+    bucketCounts[bucket - 1] += Number(row.count);
   }
-  const ratingDistribution = ALL_STAR_VALUES.map((v) => ({
-    value: v,
-    count: distMap.get(v) ?? 0,
+  const ratingDistribution = bucketCounts.map((count, index) => ({
+    value: index + 1,
+    count,
   }));
 
   // Q10 — calendar: merge duplicate dates (multiple backdrops per day),
