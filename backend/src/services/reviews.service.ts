@@ -3,9 +3,15 @@ import { AppError } from '../utils/app-error';
 import type { Review } from '../models/review.model';
 import type { UpdateReviewInput, CreateCommentInput } from '../validators/review.validators';
 
-/** Full review row joined with rating, user, and title data. */
-export interface ReviewDetail {
-  id: number;
+/**
+ * A log entry: the rating, plus the review written about it when there is one.
+ *
+ * `id` is the review's primary key. It is null for a rating logged without a
+ * written review, which is only reachable through the by-rating lookup — the
+ * by-review lookup can never produce it.
+ */
+export interface LogEntryDetail {
+  id: number | null;
   rating_id: number;
   user_id: number;
   username: string;
@@ -41,14 +47,18 @@ interface BackdropRow {
   position: number;
 }
 
-/** Row returned by the main review join (no backdrops, no is_liked). */
-interface ReviewBaseRow {
-  id: number;
+/**
+ * Row returned by the main log-entry join (no backdrops, no is_liked). Every
+ * `reviews` column is nullable here because the join is driven by `ratings`,
+ * and a rating need not have a review.
+ */
+interface EntryBaseRow {
+  id: number | null;
   rating_id: number;
-  body: string;
-  contains_spoilers: boolean;
-  liked_title: boolean;
-  likes_count: number;
+  body: string | null;
+  contains_spoilers: boolean | null;
+  liked_title: boolean | null;
+  likes_count: number | null;
   created_at: Date;
   updated_at: Date;
   value: number;
@@ -124,27 +134,41 @@ interface RatingFkRow {
   series_id: number | null;
 }
 
+/** Which key a log entry is being looked up by. */
+type EntryLookup =
+  | { by: 'review'; reviewId: number }
+  | { by: 'rating'; ratingId: number };
+
 /**
- * Fetches a single review with full join data, attached backdrops, and the
+ * Fetches one log entry with full join data, attached backdrops, and the
  * is_liked flag for the requesting user (false when anonymous).
- * @param reviewId - The review's primary key.
+ *
+ * Driven from `ratings` with a LEFT JOIN onto `reviews` so the same projection
+ * serves both lookups: by review id, where the review always exists, and by
+ * rating id, where it may not.
+ *
+ * @param lookup - Which key to resolve the entry by.
  * @param requestingUserId - The authenticated user's ID, if any.
- * @returns The review detail.
+ * @returns The log entry detail.
  */
-export async function getReviewById(
-  reviewId: number,
+async function fetchLogEntry(
+  lookup: EntryLookup,
   requestingUserId: number | undefined,
-): Promise<ReviewDetail> {
-  const [review] = await query<ReviewBaseRow>(
+): Promise<LogEntryDetail> {
+  // A fixed internal clause, never user input — the id itself stays bound.
+  const whereClause = lookup.by === 'review' ? 'rev.id = ?' : 'r.id = ?';
+  const lookupId = lookup.by === 'review' ? lookup.reviewId : lookup.ratingId;
+
+  const [entry] = await query<EntryBaseRow>(
     `SELECT
        rev.id,
-       rev.rating_id,
+       r.id AS rating_id,
        rev.body,
        rev.contains_spoilers,
        rev.liked_title,
        rev.likes_count,
-       rev.created_at,
-       rev.updated_at,
+       COALESCE(rev.created_at, r.created_at) AS created_at,
+       COALESCE(rev.updated_at, r.updated_at) AS updated_at,
        r.value AS value,
        r.watched_on,
        r.is_rewatch,
@@ -169,28 +193,36 @@ export async function getReviewById(
        (SELECT sc.person_name FROM series_credits sc
           WHERE sc.series_id = s.id AND sc.role = 'director'
           ORDER BY sc.id ASC LIMIT 1) AS series_creator
-     FROM reviews rev
-     JOIN ratings r ON rev.rating_id = r.id
-     JOIN users u ON rev.user_id = u.id
+     FROM ratings r
+     LEFT JOIN reviews rev ON rev.rating_id = r.id
+     JOIN users u ON r.user_id = u.id
      LEFT JOIN films f ON r.film_id = f.id
      LEFT JOIN series s ON r.series_id = s.id
-     WHERE rev.id = ?`,
-    [reviewId],
+     WHERE ${whereClause}`,
+    [lookupId],
   );
 
-  if (!review) {
-    throw new AppError('Review not found', 404);
+  if (!entry) {
+    throw new AppError(
+      lookup.by === 'review' ? 'Review not found' : 'Rating not found',
+      404,
+    );
   }
 
-  const backdrops = await query<BackdropRow>(
-    `SELECT url, position FROM review_media
-     WHERE review_id = ?
-     ORDER BY position ASC`,
-    [reviewId],
-  );
+  // Backdrops and likes hang off the review, so a rating without one has none.
+  const reviewId = entry.id;
+  const backdrops =
+    reviewId === null
+      ? []
+      : await query<BackdropRow>(
+          `SELECT url, position FROM review_media
+           WHERE review_id = ?
+           ORDER BY position ASC`,
+          [reviewId],
+        );
 
   let is_liked = false;
-  if (requestingUserId !== undefined) {
+  if (reviewId !== null && requestingUserId !== undefined) {
     const [like] = await query<LikeRow>(
       `SELECT user_id FROM review_likes WHERE user_id = ? AND review_id = ?`,
       [requestingUserId, reviewId],
@@ -198,16 +230,47 @@ export async function getReviewById(
     is_liked = like !== undefined;
   }
 
-  // Booleans come back as 0/1 from mysql2; cast for the API surface.
+  // Booleans come back as 0/1 from mysql2; cast for the API surface. The
+  // review-only columns fall back to the "no review written" defaults.
   return {
-    ...review,
-    contains_spoilers: Boolean(review.contains_spoilers),
-    liked_title: Boolean(review.liked_title),
-    is_rewatch: Boolean(review.is_rewatch),
-    value: Number(review.value),
+    ...entry,
+    body: entry.body ?? '',
+    contains_spoilers: Boolean(entry.contains_spoilers),
+    liked_title: Boolean(entry.liked_title),
+    likes_count: entry.likes_count ?? 0,
+    is_rewatch: Boolean(entry.is_rewatch),
+    value: Number(entry.value),
     is_liked,
     backdrops,
   };
+}
+
+/**
+ * Fetches a single review by its own primary key.
+ * @param reviewId - The review's primary key.
+ * @param requestingUserId - The authenticated user's ID, if any.
+ * @returns The log entry detail; `id` is always populated.
+ */
+export async function getReviewById(
+  reviewId: number,
+  requestingUserId: number | undefined,
+): Promise<LogEntryDetail> {
+  return fetchLogEntry({ by: 'review', reviewId }, requestingUserId);
+}
+
+/**
+ * Fetches the log entry behind a rating, whether or not a review was written.
+ * Backs the review screen for a user's own ratings, which open it to show the
+ * rating alone.
+ * @param ratingId - The rating's primary key.
+ * @param requestingUserId - The authenticated user's ID, if any.
+ * @returns The log entry detail; `id` is null when no review is attached.
+ */
+export async function getEntryByRatingId(
+  ratingId: number,
+  requestingUserId: number | undefined,
+): Promise<LogEntryDetail> {
+  return fetchLogEntry({ by: 'rating', ratingId }, requestingUserId);
 }
 
 /**

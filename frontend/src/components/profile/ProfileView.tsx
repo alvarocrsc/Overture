@@ -79,14 +79,16 @@ export default function ProfileView({
   const navigateToDetail = (
     detail:
       | { kind: 'review'; id: number }
+      | { kind: 'rating'; id: number }
       | { kind: 'film'; tmdbId: number }
       | { kind: 'series'; tmdbId: number },
   ): void => {
+    const isEntry = detail.kind === 'review' || detail.kind === 'rating';
     if (viewingSelf) {
-      if (detail.kind === 'review') {
+      if (isEntry) {
         router.push({
           pathname: '/review/[id]',
-          params: { id: String(detail.id) },
+          params: { id: String(detail.id), source: detail.kind },
         });
       } else {
         router.push({
@@ -97,8 +99,8 @@ export default function ProfileView({
       }
       return;
     }
-    if (detail.kind === 'review') {
-      overlay.present('review', { id: detail.id });
+    if (isEntry) {
+      overlay.present('review', { id: detail.id, source: detail.kind });
     } else {
       overlay.present(detail.kind, { id: detail.tmdbId });
     }
@@ -227,6 +229,12 @@ export default function ProfileView({
               onPressItem={(item) => {
                 if (item.review_id != null) {
                   navigateToDetail({ kind: 'review', id: item.review_id });
+                  return;
+                }
+                // Your own unreviewed logs still open the entry, showing the
+                // rating on its own; other people's fall through to the title.
+                if (viewingSelf) {
+                  navigateToDetail({ kind: 'rating', id: item.id });
                   return;
                 }
                 navigateToDetail(

@@ -52,18 +52,17 @@ export function LoggedTitlesScreen({
   // expanded view ships. The filter chips are likewise non-functional for now.
   const [viewMode] = useState<ListViewMode>('posters');
 
+  // This library is always the signed-in user's own, and every row in it comes
+  // from a rating — so an unreviewed title opens its log entry too, showing the
+  // rating alone rather than diverting to the title's page.
   const handleItemPress = useCallback((item: LoggedTitle): void => {
-    if (item.reviewId != null) {
-      router.push({
-        pathname: '/review/[id]',
-        params: { id: String(item.reviewId) },
-      });
-      return;
-    }
     router.push({
-      pathname: item.mediaType === 'film' ? '/film/[tmdbId]' : '/series/[tmdbId]',
-      params: { tmdbId: String(item.tmdbId) },
-    } as never);
+      pathname: '/review/[id]',
+      params:
+        item.reviewId != null
+          ? { id: String(item.reviewId), source: 'review' }
+          : { id: String(item.ratingId), source: 'rating' },
+    });
   }, []);
 
   const handleLoadMore = useCallback((): void => {

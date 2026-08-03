@@ -34,8 +34,15 @@ function renderOverlayContent(
       return <SeriesDetailScreen tmdbId={tmdbId} onPressBack={onPressBack} />;
     }
     case 'review': {
-      const reviewId = Number(entry.params.id);
-      return <ReviewScreen id={reviewId} onPressBack={onPressBack} />;
+      const entryId = Number(entry.params.id);
+      const source = entry.params.source === 'rating' ? 'rating' : 'review';
+      return (
+        <ReviewScreen
+          id={entryId}
+          source={source}
+          onPressBack={onPressBack}
+        />
+      );
     }
     case 'person':
     case 'list':

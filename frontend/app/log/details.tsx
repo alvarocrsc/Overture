@@ -36,6 +36,7 @@ import {
   TAB_BAR_BOTTOM_OFFSET,
 } from '@/src/lib/colors';
 import { formatWatchedOn, toIsoDate } from '@/src/lib/dateFormat';
+import { invalidateLogCaches } from '@/src/lib/log-cache';
 
 interface CreateRatingPayload {
   tmdb_id: number;
@@ -130,22 +131,10 @@ export default function LogDetailsScreen(): React.JSX.Element {
       return { reviewId: res.data.data.review_id ?? null };
     },
     onSuccess: ({ reviewId }) => {
-      // Invalidate queries that reflect the user's logged state for this title.
-      const queryKey =
-        log.mediaType === 'film'
-          ? ['film', log.tmdbId]
-          : ['series', log.tmdbId];
-      queryClient.invalidateQueries({ queryKey });
-      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
-      queryClient.invalidateQueries({ queryKey: ['watchlist', 'membership'] });
-      queryClient.invalidateQueries({ queryKey: ['logged', 'membership'] });
-      queryClient.invalidateQueries({ queryKey: ['stats'] });
-      queryClient.invalidateQueries({ queryKey: ['recent-activity'] });
-      queryClient.invalidateQueries({ queryKey: ['ratings'] });
-      queryClient.invalidateQueries({ queryKey: ['rating-distribution'] });
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
-      queryClient.invalidateQueries({ queryKey: ['friends-activity'] });
-      queryClient.invalidateQueries({ queryKey: ['divides'] });
+      invalidateLogCaches(queryClient, {
+        mediaType: log.mediaType,
+        tmdbId: log.tmdbId,
+      });
 
       log.reset();
       if (reviewId != null) {

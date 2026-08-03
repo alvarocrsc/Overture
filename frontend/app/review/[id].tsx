@@ -39,51 +39,17 @@ import { timeAgo } from '@/src/lib/timeAgo';
 import { backdropUrl } from '@/src/lib/tmdb';
 import { useOverlayNavigator } from '@/src/context/OverlayNavigatorContext';
 import { useRatingFormat } from '@/src/hooks/use-rating-format';
+import {
+  logEntryKeys,
+  useDeleteLogEntry,
+  useLogEntry,
+} from '@/src/hooks/use-log-entry';
 import { formatRating } from '@/src/utils/rating-format.utils';
-
-interface ReviewBackdrop {
-  url: string;
-  position: number;
-}
-
-interface ReviewDetail {
-  id: number;
-  rating_id: number;
-  user_id: number;
-  username: string;
-  avatar_url: string | null;
-  value: number;
-  body: string;
-  contains_spoilers: boolean;
-  liked_title: boolean;
-  likes_count: number;
-  created_at: string;
-  updated_at: string;
-  watched_on: string | null;
-  is_rewatch: boolean;
-  is_liked: boolean;
-  film_tmdb_id: number | null;
-  film_title: string | null;
-  film_poster: string | null;
-  film_backdrop_path: string | null;
-  film_year: string | null;
-  film_director: string | null;
-  series_tmdb_id: number | null;
-  series_title: string | null;
-  series_poster: string | null;
-  series_backdrop_path: string | null;
-  series_year: string | null;
-  series_creator: string | null;
-  backdrops: ReviewBackdrop[];
-}
+import type { LogEntrySource } from '@/src/types/review.types';
 
 interface ReviewComment extends CommentRowData {
   parent_id: number | null;
   replies: ReviewComment[];
-}
-
-interface SingleResponse<T> {
-  data: T;
 }
 
 interface DataListResponse<T> {
@@ -91,27 +57,37 @@ interface DataListResponse<T> {
 }
 
 /**
- * Posted review screen.
+ * Posted review screen, also used for a rating logged without a review.
  *
  * Header: paginated backdrop carousel + back/more chrome.
  * Body: title/info, author rating row, body text, action bar (like / comments
  * count / share), then nested Comments section.
  * Sticky bottom: "Add a comment" input, accounting for tab bar inset.
+ *
+ * Everything below the rating row hangs off the review, so a bare rating shows
+ * only the title and the score — there is nothing to like or comment on.
  */
 interface ReviewScreenProps {
   /** When provided, used instead of the route's `useLocalSearchParams`. */
   id?: number;
+  /** What `id` addresses. Defaults to a review. */
+  source?: LogEntrySource;
   /** When provided, overrides `router.back()` for the back chevron. */
   onPressBack?: () => void;
 }
 
 export default function ReviewScreen(
-  { id: idProp, onPressBack }: ReviewScreenProps = {},
+  { id: idProp, source: sourceProp, onPressBack }: ReviewScreenProps = {},
 ): React.JSX.Element {
-  const { id: idParam } = useLocalSearchParams<{ id: string }>();
-  const paramReviewIdNum = Number(idParam);
-  const paramReviewId = Number.isFinite(paramReviewIdNum) ? paramReviewIdNum : null;
-  const reviewId = idProp ?? paramReviewId;
+  const { id: idParam, source: sourceParam } = useLocalSearchParams<{
+    id: string;
+    source?: string;
+  }>();
+  const paramIdNum = Number(idParam);
+  const paramId = Number.isFinite(paramIdNum) ? paramIdNum : null;
+  const entryId = idProp ?? paramId;
+  const source: LogEntrySource =
+    sourceProp ?? (sourceParam === 'rating' ? 'rating' : 'review');
 
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -127,19 +103,14 @@ export default function ReviewScreen(
   const inputRef = useRef<TextInput>(null);
   const [commentDraft, setCommentDraft] = useState<string>('');
 
-  const reviewQ = useQuery<ReviewDetail>({
-    queryKey: ['review', reviewId],
-    enabled: reviewId != null,
-    queryFn: async () => {
-      const res = await api.get<SingleResponse<ReviewDetail>>(
-        `/reviews/${reviewId}`,
-      );
-      return res.data.data;
-    },
-  });
+  const entryQ = useLogEntry(entryId, source);
+
+  // The review's own id, which is absent when only a rating was logged. Every
+  // review-scoped request below keys off this rather than the route param.
+  const reviewId = entryQ.data?.id ?? null;
 
   const commentsQ = useQuery<ReviewComment[]>({
-    queryKey: ['review-comments', reviewId],
+    queryKey: logEntryKeys.comments(reviewId ?? -1),
     enabled: reviewId != null,
     queryFn: async () => {
       const res = await api.get<DataListResponse<ReviewComment[]>>(
@@ -159,9 +130,13 @@ export default function ReviewScreen(
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['review', reviewId] });
+      queryClient.invalidateQueries({
+        queryKey: logEntryKeys.entry(source, entryId ?? -1),
+      });
     },
   });
+
+  const deleteMut = useDeleteLogEntry();
 
   // Post a comment.
   const postCommentMut = useMutation({
@@ -172,7 +147,7 @@ export default function ReviewScreen(
       setCommentDraft('');
       inputRef.current?.blur();
       queryClient.invalidateQueries({
-        queryKey: ['review-comments', reviewId],
+        queryKey: logEntryKeys.comments(reviewId ?? -1),
       });
     },
     onError: (e: Error) => Alert.alert('Could not post comment', e.message),
@@ -195,7 +170,7 @@ export default function ReviewScreen(
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['review-comments', reviewId],
+        queryKey: logEntryKeys.comments(reviewId ?? -1),
       });
     },
   });
@@ -222,7 +197,9 @@ export default function ReviewScreen(
     postCommentMut.mutate(trimmed);
   };
 
-  if (reviewId == null) {
+  const closeScreen = onPressBack ?? ((): void => router.back());
+
+  if (entryId == null) {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Invalid review id.</Text>
@@ -230,7 +207,7 @@ export default function ReviewScreen(
     );
   }
 
-  if (reviewQ.isLoading || !reviewQ.data) {
+  if (entryQ.isLoading || !entryQ.data) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator color={Colors.white} />
@@ -238,7 +215,7 @@ export default function ReviewScreen(
     );
   }
 
-  if (reviewQ.isError) {
+  if (entryQ.isError) {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Could not load review.</Text>
@@ -246,7 +223,7 @@ export default function ReviewScreen(
     );
   }
 
-  const review = reviewQ.data;
+  const review = entryQ.data;
   const isFilm = review.film_tmdb_id != null;
   const title = isFilm ? review.film_title : review.series_title;
   const subYear = isFilm ? review.film_year : review.series_year;
@@ -259,12 +236,66 @@ export default function ReviewScreen(
   const defaultBackdropUrl = backdropUrl(defaultBackdropPath, 'w1280');
   const comments = commentsQ.data ?? [];
 
+  // A rating with no review has nothing to like, comment on or read.
+  const hasReview = review.id != null;
+  const isOwnEntry = user != null && user.id === review.user_id;
+
   const handlePressTitle = (): void => {
     if (tmdbId == null) return;
     const pathname: Href = isFilm
       ? `/film/${tmdbId}`
       : `/series/${tmdbId}`;
     router.push(pathname);
+  };
+
+  const handleDelete = (): void => {
+    if (tmdbId == null) return;
+    deleteMut.mutate(
+      {
+        ratingId: review.rating_id,
+        mediaType: isFilm ? 'film' : 'series',
+        tmdbId,
+      },
+      {
+        onSuccess: closeScreen,
+        onError: (e: Error) => Alert.alert('Could not delete', e.message),
+      },
+    );
+  };
+
+  const confirmDelete = (): void => {
+    Alert.alert(
+      hasReview ? 'Delete review?' : 'Delete rating?',
+      hasReview
+        ? 'Your rating of this title is deleted along with the review. This cannot be undone.'
+        : 'Your rating of this title is deleted. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: handleDelete },
+      ],
+    );
+  };
+
+  const handlePressMore = (): void => {
+    // Android caps Alert at three buttons and silently drops the rest, so on
+    // your own entry the delete action takes the slot the Share stub had —
+    // a fourth would cost the Cancel button on a non-cancelable dialog.
+    const secondary = isOwnEntry
+      ? {
+          text: hasReview ? 'Delete review' : 'Delete rating',
+          style: 'destructive' as const,
+          onPress: confirmDelete,
+        }
+      : { text: 'Share', onPress: (): void => undefined };
+
+    Alert.alert('More options', undefined, [
+      {
+        text: title ? `Go to ${title}` : 'Go to title',
+        onPress: handlePressTitle,
+      },
+      secondary,
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
   };
 
   const bottomInset =
@@ -303,7 +334,7 @@ export default function ReviewScreen(
               {/* Top chrome (back / more) over the backdrop */}
               <View style={[styles.topChrome, { top: insets.top + 16 }]}>
                 <Pressable
-                  onPress={onPressBack ?? (() => router.back())}
+                  onPress={closeScreen}
                   hitSlop={12}
                   style={({ pressed }) => [
                     styles.iconBtn,
@@ -319,16 +350,7 @@ export default function ReviewScreen(
                   />
                 </Pressable>
                 <Pressable
-                  onPress={() => {
-                    Alert.alert('More options', undefined, [
-                      {
-                        text: title ? `Go to ${title}` : 'Go to title',
-                        onPress: handlePressTitle,
-                      },
-                      { text: 'Share', onPress: () => undefined },
-                      { text: 'Cancel', style: 'cancel' },
-                    ]);
-                  }}
+                  onPress={handlePressMore}
                   hitSlop={12}
                   style={({ pressed }) => [
                     styles.iconBtn,
@@ -401,130 +423,140 @@ export default function ReviewScreen(
             </View>
           ) : null}
 
-          {/* Action bar */}
-          <View style={styles.actionsBar}>
-            <Pressable
-              onPress={() => likeReviewMut.mutate(review.is_liked)}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.actionBtn,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={
-                review.is_liked ? 'Unlike review' : 'Like review'
-              }
-            >
-              <Ionicons
-                name={review.is_liked ? 'heart' : 'heart-outline'}
-                size={18}
-                color={
-                  review.is_liked ? Colors.accentBlue : Colors.textMuted
-                }
-              />
-              <Text style={styles.actionCount}>{review.likes_count}</Text>
-            </Pressable>
-            <View style={styles.actionBtn}>
-              <Ionicons
-                name="chatbubble-outline"
-                size={17}
-                color={Colors.textMuted}
-              />
-              <Text style={styles.actionCount}>{comments.length}</Text>
-            </View>
-            <View style={styles.spacer} />
-            <Pressable
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.actionBtn,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Share review"
-              onPress={() => undefined}
-            >
-              <Ionicons
-                name="share-outline"
-                size={18}
-                color={Colors.textMuted}
-              />
-            </Pressable>
-          </View>
-
-          <View style={styles.separator} />
-
-          {/* Comments section */}
-          <Text style={styles.commentsHeader}>Comments</Text>
-          {commentsQ.isLoading ? (
-            <ActivityIndicator
-              color={Colors.white}
-              style={styles.commentsLoader}
-            />
-          ) : comments.length === 0 ? (
-            <Text style={styles.noComments}>Be the first to comment.</Text>
-          ) : (
-            comments.map((c) => (
-              <View key={c.id}>
-                <CommentRow
-                  comment={c}
-                  onPressLike={(commentId, currentlyLiked) =>
-                    likeCommentMut.mutate({ commentId, currentlyLiked })
+          {/* Likes and comments belong to the review, so a bare rating ends
+              at the score above. */}
+          {hasReview ? (
+            <>
+              {/* Action bar */}
+              <View style={styles.actionsBar}>
+                <Pressable
+                  onPress={() => likeReviewMut.mutate(review.is_liked)}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    review.is_liked ? 'Unlike review' : 'Like review'
                   }
-                  onPressReply={handleReplyTo}
-                  onPressUser={(userId) => overlay.present('user', { id: userId })}
-                />
-                {c.replies.map((r) => (
-                  <CommentRow
-                    key={r.id}
-                    comment={r}
-                    isReply
-                    onPressLike={(commentId, currentlyLiked) =>
-                      likeCommentMut.mutate({ commentId, currentlyLiked })
+                >
+                  <Ionicons
+                    name={review.is_liked ? 'heart' : 'heart-outline'}
+                    size={18}
+                    color={
+                      review.is_liked ? Colors.accentBlue : Colors.textMuted
                     }
-                    onPressReply={handleReplyTo}
-                    onPressUser={(userId) => overlay.present('user', { id: userId })}
                   />
-                ))}
+                  <Text style={styles.actionCount}>{review.likes_count}</Text>
+                </Pressable>
+                <View style={styles.actionBtn}>
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={17}
+                    color={Colors.textMuted}
+                  />
+                  <Text style={styles.actionCount}>{comments.length}</Text>
+                </View>
+                <View style={styles.spacer} />
+                <Pressable
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.actionBtn,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Share review"
+                  onPress={() => undefined}
+                >
+                  <Ionicons
+                    name="share-outline"
+                    size={18}
+                    color={Colors.textMuted}
+                  />
+                </Pressable>
               </View>
-            ))
-          )}
+
+              <View style={styles.separator} />
+
+              {/* Comments section */}
+              <Text style={styles.commentsHeader}>Comments</Text>
+              {commentsQ.isLoading ? (
+                <ActivityIndicator
+                  color={Colors.white}
+                  style={styles.commentsLoader}
+                />
+              ) : comments.length === 0 ? (
+                <Text style={styles.noComments}>Be the first to comment.</Text>
+              ) : (
+                comments.map((c) => (
+                  <View key={c.id}>
+                    <CommentRow
+                      comment={c}
+                      onPressLike={(commentId, currentlyLiked) =>
+                        likeCommentMut.mutate({ commentId, currentlyLiked })
+                      }
+                      onPressReply={handleReplyTo}
+                      onPressUser={(userId) =>
+                        overlay.present('user', { id: userId })
+                      }
+                    />
+                    {c.replies.map((r) => (
+                      <CommentRow
+                        key={r.id}
+                        comment={r}
+                        isReply
+                        onPressLike={(commentId, currentlyLiked) =>
+                          likeCommentMut.mutate({ commentId, currentlyLiked })
+                        }
+                        onPressReply={handleReplyTo}
+                        onPressUser={(userId) =>
+                          overlay.present('user', { id: userId })
+                        }
+                      />
+                    ))}
+                  </View>
+                ))
+              )}
+            </>
+          ) : null}
         </PinnedHeaderScrollView>
 
         {/* Sticky comment input */}
-        <View
-          style={[styles.inputBar, { paddingBottom: bottomInset }]}
-        >
-          <UserAvatar
-            avatarUrl={user?.avatar_url ?? null}
-            username={user?.username ?? ''}
-            size={36}
-          />
-          <TextInput
-            ref={inputRef}
-            value={commentDraft}
-            onChangeText={setCommentDraft}
-            placeholder="Add a comment..."
-            placeholderTextColor={Colors.textMuted}
-            multiline
-            style={styles.input}
-            selectionColor={Colors.accentBlue}
-          />
-          {commentDraft.trim().length > 0 ? (
-            <Pressable
-              onPress={handleSubmitComment}
-              disabled={postCommentMut.isPending}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.sendBtn,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Send comment"
-            >
-              <Ionicons name="send" size={18} color={Colors.accentBlue} />
-            </Pressable>
-          ) : null}
-        </View>
+        {hasReview ? (
+          <View style={[styles.inputBar, { paddingBottom: bottomInset }]}>
+            <UserAvatar
+              avatarUrl={user?.avatar_url ?? null}
+              username={user?.username ?? ''}
+              size={36}
+            />
+            <TextInput
+              ref={inputRef}
+              value={commentDraft}
+              onChangeText={setCommentDraft}
+              placeholder="Add a comment..."
+              placeholderTextColor={Colors.textMuted}
+              multiline
+              style={styles.input}
+              selectionColor={Colors.accentBlue}
+            />
+            {commentDraft.trim().length > 0 ? (
+              <Pressable
+                onPress={handleSubmitComment}
+                disabled={postCommentMut.isPending}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.sendBtn,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Send comment"
+              >
+                <Ionicons name="send" size={18} color={Colors.accentBlue} />
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </View>
   );

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getReviewById,
+  getEntryByRatingId,
   updateReview,
   deleteReview,
   likeReview,
@@ -14,6 +15,8 @@ import { verifyAccessToken } from '../middleware/auth';
 
 const router = Router();
 
+// Declared before '/:id' so the literal segment always wins the match.
+router.get('/by-rating/:ratingId', getEntryByRatingId);
 router.get('/:id', getReviewById);
 router.put('/:id', verifyAccessToken, updateReview);
 router.delete('/:id', verifyAccessToken, deleteReview);

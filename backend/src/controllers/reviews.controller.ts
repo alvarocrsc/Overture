@@ -49,6 +49,15 @@ export async function getReviewById(req: Request, res: Response): Promise<void> 
   res.status(200).json({ data: review });
 }
 
+/** GET /api/v1/reviews/by-rating/:ratingId */
+export async function getEntryByRatingId(req: Request, res: Response): Promise<void> {
+  const ratingId = parseId(String(req.params['ratingId']), 'rating ID');
+  // Public like /reviews/:id — decode the token by hand for the is_liked flag.
+  const requestingUserId = req.user?.userId ?? tryDecodeUserId(req);
+  const entry = await reviewsService.getEntryByRatingId(ratingId, requestingUserId);
+  res.status(200).json({ data: entry });
+}
+
 /** PUT /api/v1/reviews/:id */
 export async function updateReview(req: Request, res: Response): Promise<void> {
   const reviewId = parseId(String(req.params['id']), 'review ID');
